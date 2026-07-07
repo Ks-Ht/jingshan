@@ -2,11 +2,11 @@ cask "jingshan" do
   version "0.8.0"
   sha256 "bbda09407c9252869d87843654ea2496a0d1cf85f4a35edd5ab656ecc6a99262"
 
-  url "https://github.com/Ks-Ht/jingshan/releases/download/v#{version}/Jingshan-#{version}.zip"
+  url "https://github.com/kongshan-0924/jingshan/releases/download/v#{version}/Jingshan-#{version}.zip"
   name "净山"
   name "Jingshan"
   desc "清理与系统监控工具"
-  homepage "https://github.com/Ks-Ht/jingshan"
+  homepage "https://github.com/kongshan-0924/jingshan"
 
   depends_on macos: :sonoma
 

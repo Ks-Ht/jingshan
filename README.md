@@ -19,7 +19,7 @@
 ### 通过 Homebrew（推荐）
 
 ```bash
-brew tap ks-ht/jingshan https://github.com/Ks-Ht/jingshan
+brew tap kongshan-0924/jingshan https://github.com/kongshan-0924/jingshan
 brew install --cask jingshan
 ```
 
@@ -35,7 +35,7 @@ xattr -cr /Applications/净山.app
 
 ```bash
 brew install xcodegen
-git clone https://github.com/Ks-Ht/jingshan.git && cd jingshan
+git clone https://github.com/kongshan-0924/jingshan.git && cd jingshan
 xcodegen generate
 xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Release build
 ```

@@ -54,7 +54,7 @@ struct TopNavBar: View {
                 Label("关于净山", systemImage: "info.circle")
             }
             Button {
-                if let url = URL(string: "https://github.com/Ks-Ht/jingshan/releases") {
+                if let url = URL(string: "https://github.com/kongshan-0924/jingshan/releases") {
                     NSWorkspace.shared.open(url)
                 }
             } label: {
