@@ -13,8 +13,7 @@ cask "jingshan" do
   app "净山.app"
 
   postflight do
-    system_command "/usr/bin/xattr",
-                    args: ["-cr", "#{appdir}/净山.app"]
+    system_command "/usr/bin/xattr", args: ["-cr", "#{appdir}/净山.app"]
   end
 
   zap trash: [
