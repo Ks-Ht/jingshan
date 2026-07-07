@@ -8,7 +8,7 @@ cask "jingshan" do
   desc "Swift 原生 macOS 清理与系统监控工具"
   homepage "https://github.com/Ks-Ht/jingshan"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "净山.app"
 
