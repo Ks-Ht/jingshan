@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	Deliberately empty: no com.apple.security.app-sandbox entitlement.
+	Jingshan must run unsandboxed so it can be granted Full Disk Access —
+	a sandboxed app can never receive Full Disk Access, by macOS design,
+	regardless of user consent. See docs/HANDOFF.md for the full rationale.
+	-->
+</dict>
+</plist>

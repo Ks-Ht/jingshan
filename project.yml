@@ -1,0 +1,46 @@
+name: Jingshan
+options:
+  bundleIdPrefix: net.kongshan
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: "NO"
+    CODE_SIGNING_ALLOWED: "YES"
+    ENABLE_HARDENED_RUNTIME: "NO"
+    DEVELOPMENT_TEAM: ""
+
+packages:
+  JingshanCore:
+    path: JingshanCore
+
+targets:
+  Jingshan:
+    type: application
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: App
+        excludes:
+          - "Jingshan.entitlements"
+      - path: Features
+      - path: Permissions
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.kongshan.jingshan
+        PRODUCT_NAME: 净山
+        GENERATE_INFOPLIST_FILE: "YES"
+        INFOPLIST_KEY_CFBundleDisplayName: 净山
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Kongshan."
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
+        CODE_SIGN_ENTITLEMENTS: App/Jingshan.entitlements
+        ENABLE_PREVIEWS: "YES"
+        MARKETING_VERSION: "0.7.0"
+        CURRENT_PROJECT_VERSION: "1"
+    dependencies:
+      - package: JingshanCore

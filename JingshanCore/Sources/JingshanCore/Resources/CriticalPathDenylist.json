@@ -1,0 +1,21 @@
+[
+  { "pathPrefix": "/", "matchType": "exactPath", "reason": "文件系统根目录" },
+  { "pathPrefix": "/System", "matchType": "prefixOfDirectory", "reason": "macOS 系统只读卷" },
+  { "pathPrefix": "/Library/Apple", "matchType": "prefixOfDirectory", "reason": "Apple 系统组件" },
+  { "pathPrefix": "/Library/Keychains", "matchType": "prefixOfDirectory", "reason": "系统钥匙串" },
+  { "pathPrefix": "/Library/Extensions", "matchType": "prefixOfDirectory", "reason": "系统内核扩展" },
+  { "pathPrefix": "/private", "matchType": "prefixOfDirectory", "reason": "系统私有目录（含 /etc, /var, /tmp 解析后的真实路径）" },
+  { "pathPrefix": "/etc", "matchType": "prefixOfDirectory", "reason": "系统配置（符号链接到 /private/etc）" },
+  { "pathPrefix": "/var", "matchType": "prefixOfDirectory", "reason": "系统运行时数据（符号链接到 /private/var）" },
+  { "pathPrefix": "/tmp", "matchType": "prefixOfDirectory", "reason": "系统临时目录（符号链接到 /private/tmp）" },
+  { "pathPrefix": "/bin", "matchType": "prefixOfDirectory", "reason": "系统二进制" },
+  { "pathPrefix": "/sbin", "matchType": "prefixOfDirectory", "reason": "系统管理二进制" },
+  { "pathPrefix": "/usr/bin", "matchType": "prefixOfDirectory", "reason": "系统二进制" },
+  { "pathPrefix": "/usr/sbin", "matchType": "prefixOfDirectory", "reason": "系统管理二进制" },
+  { "pathPrefix": "/usr/lib", "matchType": "prefixOfDirectory", "reason": "系统库" },
+  { "pathPrefix": "/usr/libexec", "matchType": "prefixOfDirectory", "reason": "系统辅助程序" },
+  { "pathPrefix": "/usr/share", "matchType": "prefixOfDirectory", "reason": "系统共享资源" },
+  { "pathPrefix": "/usr/standalone", "matchType": "prefixOfDirectory", "reason": "系统独立组件" },
+  { "pathPrefix": "/Applications", "matchType": "exactPath", "reason": "应用目录本身（个别 App 由卸载器模块处理）" },
+  { "pathPrefix": "/Volumes", "matchType": "exactPath", "reason": "外部卷挂载根目录本身" }
+]

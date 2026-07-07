@@ -1,0 +1,4 @@
+[
+  { "bundleIdentifierPattern": "com.apple.*", "reason": "Apple 系统应用，禁止作为清理目标" },
+  { "bundleIdentifierPattern": "net.kongshan.jingshan", "reason": "净山自身，避免误清理自身数据" }
+]
