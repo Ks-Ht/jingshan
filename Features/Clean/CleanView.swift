@@ -1,26 +1,19 @@
-import AppKit
 import JingshanCore
 import SwiftUI
 
 struct CleanView: View {
     let viewModel: CleanViewModel
-    @State private var hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
     @State private var showingConfirmation = false
     @State private var showingEmptyTrashConfirmation = false
+    @State private var showingStrongModeInfo = false
 
     var body: some View {
-        Group {
-            if hasFullDiskAccess {
-                scanContent
-            } else {
-                PermissionOnboardingView(onOpenSettings: openPrivacySettings)
-            }
-        }
+        // Full Disk Access is now surfaced globally by RootView's persistent
+        // banner (and the first-run welcome), so this view no longer gates
+        // itself — that avoided a doubled banner + onboarding on the Clean tab.
+        scanContent
         .navigationTitle("清理")
         .tint(InkPalette.cleanAccent) // module color for all controls here, not system blue
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
-        }
         .sheet(isPresented: $showingConfirmation) {
             ConfirmSheetShell(
                 title: "确认清理",
@@ -51,6 +44,12 @@ struct CleanView: View {
                 set: { if !$0 { viewModel.lastCleanupSummary = nil } }
             )
         ) {
+            if let summary = viewModel.lastCleanupSummary, !summary.dryRun, summary.freedBytes > 0 {
+                Button("打开废纸篓") {
+                    SystemActions.openTrash()
+                    viewModel.lastCleanupSummary = nil
+                }
+            }
             Button("好") { viewModel.lastCleanupSummary = nil }
         } message: {
             if let summary = viewModel.lastCleanupSummary {
@@ -168,16 +167,48 @@ struct CleanView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                } else if viewModel.isScanning {
+                    ProgressView().controlSize(.large)
+                    Text("正在扫描…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else {
-                    RingGaugePlaceholder(diameter: 88, lineWidth: 8)
                     Text("尚未扫描 · 点击“开始扫描”查看可清理内容")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
+                strongModeToggle
             }
         }
         .padding()
+    }
+
+    private var strongModeToggle: some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            Toggle(isOn: Binding(
+                get: { viewModel.strongMode },
+                set: { on in
+                    viewModel.strongMode = on
+                    if on { showingStrongModeInfo = true }
+                    viewModel.startScan() // re-scan to add/remove deep items
+                }
+            )) {
+                Text("强力模式")
+                    .font(.subheadline)
+            }
+            .toggleStyle(.switch)
+            .tint(InkPalette.cleanAccent)
+            .disabled(viewModel.isScanning || viewModel.isCleaning)
+            Text(viewModel.strongMode ? "更深扫描 · 全部需手动勾选" : "更深/边缘缓存扫描")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .alert("强力模式", isPresented: $showingStrongModeInfo) {
+            Button("我知道了") {}
+        } message: {
+            Text("强力模式会扫描更深、更边缘的缓存（仅限已知安全、可再生成的位置）。为防止误删，扫描到的项目一律不预先勾选，需要你逐项确认；受保护路径在任何模式下都不会被清理，删除仍然先移到废纸篓，可以恢复。")
+        }
     }
 
     private func summaryMessage(_ summary: CleanupSummary) -> String {
@@ -191,11 +222,6 @@ struct CleanView: View {
             parts.append("失败 \(summary.failedCount) 项")
         }
         return parts.joined(separator: "，")
-    }
-
-    private func openPrivacySettings() {
-        guard let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") else { return }
-        NSWorkspace.shared.open(url)
     }
 }
 

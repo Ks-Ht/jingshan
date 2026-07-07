@@ -18,6 +18,23 @@ final class AppSettings {
         didSet { defaults.set(dryRunEnabled, forKey: Self.dryRunKey) }
     }
 
+    /// Whether the first-run welcome has been shown/completed. Drives the
+    /// one-time `WelcomeSheet`.
+    var hasCompletedOnboarding: Bool {
+        didSet { defaults.set(hasCompletedOnboarding, forKey: Self.hasCompletedOnboardingKey) }
+    }
+
+    /// Whether the menu-bar tray item is shown. When off, no background
+    /// sampling runs for it.
+    var menuBarEnabled: Bool {
+        didSet { defaults.set(menuBarEnabled, forKey: Self.menuBarEnabledKey) }
+    }
+
+    /// Menu-bar icon style: false = ink-mountain logo, true = live CPU%.
+    var menuBarShowsPercent: Bool {
+        didSet { defaults.set(menuBarShowsPercent, forKey: Self.menuBarShowsPercentKey) }
+    }
+
     private(set) var exclusions: UserExclusionList
 
     /// User-configured Purge scan roots. Empty means "use the defaults"
@@ -32,6 +49,9 @@ final class AppSettings {
     private let exclusionsURL: URL
     private static let dryRunKey = "net.kongshan.jingshan.dryRunEnabled"
     private static let purgeScanPathsKey = "net.kongshan.jingshan.purgeScanPaths"
+    private static let hasCompletedOnboardingKey = "net.kongshan.jingshan.hasCompletedOnboarding"
+    private static let menuBarEnabledKey = "net.kongshan.jingshan.menuBarEnabled"
+    private static let menuBarShowsPercentKey = "net.kongshan.jingshan.menuBarShowsPercent"
 
     init(
         defaults: UserDefaults = .standard,
@@ -40,6 +60,9 @@ final class AppSettings {
         self.defaults = defaults
         self.exclusionsURL = exclusionsURL
         self.dryRunEnabled = defaults.bool(forKey: Self.dryRunKey)
+        self.hasCompletedOnboarding = defaults.bool(forKey: Self.hasCompletedOnboardingKey)
+        self.menuBarEnabled = defaults.object(forKey: Self.menuBarEnabledKey) as? Bool ?? true
+        self.menuBarShowsPercent = defaults.bool(forKey: Self.menuBarShowsPercentKey)
         self.exclusions = (try? UserExclusionList.load(from: exclusionsURL)) ?? UserExclusionList()
         self.purgeScanPaths = defaults.stringArray(forKey: Self.purgeScanPathsKey) ?? []
     }

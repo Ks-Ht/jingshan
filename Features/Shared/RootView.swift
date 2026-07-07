@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct RootView: View {
@@ -12,15 +13,27 @@ struct RootView: View {
     @State private var dockerVM = DockerViewModel()
     @State private var purgeVM = PurgeViewModel()
     @State private var uninstallVM = UninstallerViewModel()
+    @State private var largeFilesVM = LargeFilesViewModel()
     @State private var statusVM = StatusViewModel()
 
     @State private var lastCheckDate: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    // Full Disk Access is the app's命门: without it most protected locations
+    // read 0 bytes and every scan looks broken. Tracked here (not per-view) so
+    // a single persistent banner covers all tabs, and re-checked whenever the
+    // app reactivates — TCC caches the grant at launch, so returning from
+    // System Settings is when the state can change (short of a relaunch).
+    @State private var hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
+    @State private var showingWelcome = !AppSettings.shared.hasCompletedOnboarding
+
     var body: some View {
         VStack(spacing: 0) {
             TopNavBar(selection: $tab)
             Divider().opacity(0.5)
+            if !hasFullDiskAccess {
+                FullDiskAccessBanner()
+            }
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(InkPalette.paper)
@@ -36,6 +49,19 @@ struct RootView: View {
             } else {
                 statusVM.stop()
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
+        }
+        .sheet(isPresented: $showingWelcome) {
+            WelcomeSheet(
+                hasFullDiskAccess: hasFullDiskAccess,
+                onOpenSettings: PermissionActions.openFullDiskAccessSettings,
+                onFinish: {
+                    AppSettings.shared.hasCompletedOnboarding = true
+                    showingWelcome = false
+                }
+            )
         }
     }
 
@@ -60,6 +86,8 @@ struct RootView: View {
             PurgeView(viewModel: purgeVM)
         case .uninstall:
             UninstallerView(viewModel: uninstallVM)
+        case .largeFiles:
+            LargeFilesView(viewModel: largeFilesVM)
         case .status:
             StatusView(viewModel: statusVM)
         }

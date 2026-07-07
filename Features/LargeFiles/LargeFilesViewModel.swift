@@ -3,37 +3,30 @@ import JingshanCore
 
 @MainActor
 @Observable
-final class PurgeViewModel {
-    private(set) var candidates: [PurgeCandidate] = []
+final class LargeFilesViewModel {
+    private(set) var candidates: [LargeFileScanner.Candidate] = []
     private(set) var isScanning = false
     private(set) var isCleaning = false
-    /// Distinguishes "never scanned" from "scanned and genuinely found
-    /// nothing" — an empty `candidates` array means either.
     private(set) var hasScannedOnce = false
-    /// Live scan feedback: the directory currently being walked and the
-    /// running found-count, so the UI shows visible progress instead of
-    /// flashing.
     private(set) var scanningPath: String?
     private(set) var liveFoundCount = 0
     var selectedIDs: Set<String> = []
     var lastCleanupSummary: CleanupSummary?
 
+    /// The folder to scan. Defaults to the home directory; the user can point
+    /// it at a specific folder instead.
+    var scanRoot: String = LargeFileScanner.defaultRoot()
+
     private var scanTask: Task<Void, Never>?
 
-    var totalReclaimableBytes: Int64 {
-        candidates.reduce(0) { $0 + ($1.sizeBytes ?? 0) }
-    }
+    var totalBytes: Int64 { candidates.reduce(0) { $0 + $1.sizeBytes } }
+    var oldCount: Int { candidates.filter(\.isOld).count }
 
-    var selectedCandidates: [PurgeCandidate] {
+    var selectedCandidates: [LargeFileScanner.Candidate] {
         candidates.filter { selectedIDs.contains($0.id) }
     }
-
     var totalSelectedBytes: Int64 {
-        selectedCandidates.reduce(0) { $0 + ($1.sizeBytes ?? 0) }
-    }
-
-    var scanRoots: [String] {
-        AppSettings.shared.effectivePurgeScanPaths()
+        selectedCandidates.reduce(0) { $0 + $1.sizeBytes }
     }
 
     func startScan() {
@@ -46,14 +39,10 @@ final class PurgeViewModel {
         liveFoundCount = 0
         isScanning = true
 
-        let roots = scanRoots
-        // Strong capture of `self` is fine and intended: the VM is
-        // `@MainActor`-isolated (so Sendable), and the task self-releases on
-        // completion. The progress closure is `@Sendable`; it hops to the
-        // main actor to touch VM state.
+        let root = scanRoot
         scanTask = Task {
-            let scanner = PurgeScanner()
-            let found = await scanner.scan(roots: roots) { progress in
+            let scanner = LargeFileScanner()
+            let found = await scanner.scan(root: root) { progress in
                 Task { @MainActor in
                     guard self.isScanning else { return }
                     self.scanningPath = progress.currentPath
@@ -61,12 +50,10 @@ final class PurgeViewModel {
                 }
             }
             guard !Task.isCancelled else { return }
-            self.candidates = found.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
-            // Recently-touched projects default OFF: an actively worked-on
-            // project's build artifacts are a less clear-cut win to nuke
-            // right now (Mole's own "Recent" projects follow the same
-            // unselected-by-default policy).
-            self.selectedIDs = Set(found.filter { !$0.isRecent }.map(\.id))
+            self.candidates = found
+            // Deleting a user's own large files is high-stakes, so NOTHING is
+            // pre-selected — every file must be ticked by hand.
+            self.selectedIDs = []
             self.scanningPath = nil
             self.isScanning = false
             self.hasScannedOnce = true
@@ -79,16 +66,12 @@ final class PurgeViewModel {
         isScanning = false
     }
 
-    func isSelected(_ candidate: PurgeCandidate) -> Bool {
+    func isSelected(_ candidate: LargeFileScanner.Candidate) -> Bool {
         selectedIDs.contains(candidate.id)
     }
 
-    func setSelected(_ candidate: PurgeCandidate, _ selected: Bool) {
-        if selected {
-            selectedIDs.insert(candidate.id)
-        } else {
-            selectedIDs.remove(candidate.id)
-        }
+    func setSelected(_ candidate: LargeFileScanner.Candidate, _ selected: Bool) {
+        if selected { selectedIDs.insert(candidate.id) } else { selectedIDs.remove(candidate.id) }
     }
 
     func performCleanup(permanently: Bool) async {
@@ -130,9 +113,9 @@ final class PurgeViewModel {
 
         lastCleanupSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
         if !isDryRun {
-            CleanupHistoryStore.shared.record(module: "构建产物", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
+            CleanupHistoryStore.shared.record(module: "大文件", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
         }
-        selectedIDs.removeAll()
+        selectedIDs = []
         startScan()
     }
 }

@@ -32,6 +32,9 @@ struct StatusView: View {
                             if let battery = viewModel.snapshot.battery, battery.isPresent {
                                 BatteryCard(battery: battery)
                             }
+                            PerCoreCard(perCore: viewModel.snapshot.cpu.perCoreUsagePercent)
+                            SystemInfoCard(info: viewModel.systemInfo)
+                            TopProcessesCard(rows: viewModel.topProcesses)
                         }
                     }
                     .padding()

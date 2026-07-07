@@ -44,6 +44,9 @@ enum InkPalette {
     /// Card surface — a touch whiter than `paper` so cards lift off the page.
     static let card = Color(light: NSColor(hex: 0xFFFFFF), dark: NSColor(hex: 0x242529))
     static let hairline = Color(light: NSColor(hex: 0xE6E3DC), dark: NSColor(hex: 0x2E2F33))
+    /// The recessed track behind the top-nav segmented pills (mole-style):
+    /// the selected pill sits on top as a lighter capsule.
+    static let track = Color(light: NSColor(hex: 0xECEAE3), dark: NSColor(hex: 0x2A2B2F))
 
     /// Brand/primary accent — the ink-green (松绿) that leads the whole app:
     /// top-nav selection, the home health-check hero, primary buttons.

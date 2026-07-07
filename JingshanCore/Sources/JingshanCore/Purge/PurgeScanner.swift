@@ -31,7 +31,7 @@ public struct PurgeScanner: Sendable {
     }
 
     public static func defaultRoots(homeDirectory: String = NSHomeDirectory(), fileManager: FileManager = .default) -> [String] {
-        ["Projects", "Developer", "GitHub", "dev"]
+        ["workspace", "Projects", "Developer", "GitHub", "dev"]
             .map { homeDirectory + "/" + $0 }
             .filter { fileManager.fileExists(atPath: $0) }
     }

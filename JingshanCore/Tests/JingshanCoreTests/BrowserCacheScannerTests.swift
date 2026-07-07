@@ -23,7 +23,8 @@ struct BrowserCacheScannerTests {
         let item = try #require(category.items.first)
         #expect(item.resolvedDisplayLabel == "Safari")
         #expect(item.ownerAppBundleID == "com.apple.Safari")
-        #expect(item.sizeBytes == 5)
+        // Actual on-disk allocation (block-rounded), not logical bytes.
+        #expect(item.sizeBytes == FileSizeCalculator.allocatedSize(ofPath: safariCache.appendingPathComponent("a.db").path))
     }
 
     @Test("reports an empty category when no known browser is installed")

@@ -26,10 +26,13 @@ struct CleanGroupSectionView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 12) {
-                TriStateCheckbox(state: selectionState) {
+                TriStateCheckbox(state: selectionState, tint: InkPalette.cleanAccent) {
                     viewModel.setSelected(selectableItems, selectionState != .on)
                 }
-                .disabled(selectableItems.isEmpty)
+                // Strong mode deliberately offers no group "select all" — every
+                // item must be ticked by hand — so this is disabled while it's on.
+                .disabled(selectableItems.isEmpty || viewModel.strongMode)
+                .help(viewModel.strongMode ? "强力模式下需逐项勾选，不提供整组全选" : "")
                 .padding(.top, 2)
 
                 Image(systemName: group.group.systemImage)

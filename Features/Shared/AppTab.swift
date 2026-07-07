@@ -10,6 +10,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case docker
     case purge
     case uninstall
+    case largeFiles
     case status
 
     var id: String { rawValue }
@@ -23,6 +24,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .docker: return "Docker"
         case .purge: return "构建产物"
         case .uninstall: return "卸载"
+        case .largeFiles: return "大文件"
         case .status: return "状态"
         }
     }
@@ -36,6 +38,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .docker: return InkPalette.dockerAccent
         case .purge: return InkPalette.purgeAccent
         case .uninstall: return InkPalette.uninstallerAccent
+        case .largeFiles: return InkPalette.coolCyan
         case .status: return InkPalette.statusAccent
         }
     }
@@ -49,6 +52,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .docker: return "shippingbox.fill"
         case .purge: return "hammer.fill"
         case .uninstall: return "trash.fill"
+        case .largeFiles: return "doc.viewfinder.fill"
         case .status: return "waveform.path.ecg"
         }
     }

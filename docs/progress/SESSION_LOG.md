@@ -206,3 +206,49 @@
 - **打包+发布**：`ditto -c -k --sequesterRsrc --keepParent` 打成 `Jingshan-0.8.0.zip`（1.1 MB），`shasum -a 256` = `bbda0940...a99262`，`gh release create v0.8.0`（发到 kongshan-0924，带中文 release notes）。更新 `Casks/jingshan.rb` 的 `version`/`sha256`。
 - **端到端验证**：`curl -L` 确认 release 资源可下载（HTTP 200、1120342 字节）且下载物 sha256 与 Cask 完全一致；`brew tap kongshan-0924/jingshan` + `brew info` 读到 0.8.0、`brew audit` 无报错；`brew upgrade --cask` 实测从 0.7.0 升到 0.8.0（下载→校验 sha→装到 `/Applications`→postflight `xattr -cr` 清掉 quarantine），装完 `/Applications/净山.app` 是 0.8.0、无 quarantine、`open` 冒烟运行无 crash。**本轮改动已全部提交并推送，v0.8.0 已发布上线。**
 - 发布页：https://github.com/kongshan-0924/jingshan/releases/tag/v0.8.0
+
+## 续二十一（M24：权限引导 + 功能正确性 + 安全兜底，用户"收口版"提示词）
+用户提供 `净山_完整提示词_权限+功能正确性+安全.md`，要求让 App"能真正给别人用"：FDA 引导(§1)、逐模块正确性(§2)、删除安全兜底(§3)、打磨(§4)、四态/无障碍(§5)、设置+首启(§6)。先派只读审计 agent 摸清"已实现 vs 缺口"，避免重造已有的安全代码。审计结论：§3 删除安全（Trash 默认/denylist 硬拦截/永久删除需显式确认）、Docker `system df` 精确体积、9/12 残留位置、逐项确认弹窗、完成汇总——**都已实现**。真实缺口只有几处，按 §1→§3→§2→§4 顺序做：
+- **§1+§6（M24.1）全局 FDA 引导 + 首启欢迎（最大缺口）**：原来 FDA 引导只接在清理 tab（其它 tab 无感、无重启提示、无设置入口、无首启）。新增 `Permissions/FullDiskAccessSupport.swift`（`PermissionActions.openFullDiskAccessSettings/relaunch` + `FullDiskAccessBanner` 持久横幅）、`Permissions/WelcomeSheet.swift`（首启欢迎：安全承诺卡「先扫描列清单/移废纸篓可找回/受保护位置绝不触碰」+ FDA 请求，`WelcomeContent` 拆出来供离屏渲染，因为 `ImageRenderer` 不布局 `ScrollView`）；`AppSettings` 加 `hasCompletedOnboarding`；`RootView` 顶部所有 tab 持久横幅 + `didBecomeActive` 复查 FDA + 首启 sheet；`SettingsView` 加「完全磁盘访问权限」状态区（打开系统设置/授权后重启）；删掉 CleanView 自己的整页 gate（改由全局横幅覆盖，避免双横幅）+ 删除孤立的 `PermissionOnboardingView.swift`。深链 `x-apple.systempreferences:...?Privacy_AllFiles`、重启用 `NSWorkspace.openApplication(createsNewApplicationInstance)` + `NSApp.terminate`。
+- **§3.4（M24.2）"打开废纸篓"入口**：清理/构建产物/卸载三条走 `DeletionEngine`→废纸篓的完成弹窗，非 dry-run 且释放>0 时加「打开废纸篓」按钮（`SystemActions.openTrash`）。Docker 故意不加（运行时资源走 CLI 删除、不进废纸篓，加了会误导）。
+- **§2.1（M24.4）体积改用实际占用**：审计发现 `FileSizeCalculator.sizeAsync/size` 用的是逻辑 `.fileSize`（只有 Docker VM 单独用了 `allocatedSize`）。改成递归累加 `allocatedSize`（`totalFileAllocatedSize`，等价 du，块对齐+稀疏安全）——这才是"能释放多少空间"的真实数字。相应把 4 个断言精确小体积的测试（UserCache/Trash/DevTool/Browser）改成对照 `FileSizeCalculator.allocatedSize(ofPath:)`。`PurgeScanner.defaultRoots` 加 `workspace`（§2.4 明确列出、存在才扫）。
+- **§4（M24.3）打磨**：`MountainSilhouette` 填充 0.09→0.06、描边 0.20→0.18（按钮浮在干净纸上）；清理/Docker/构建产物 hero 的未扫描态去掉"--"虚线环——改成"扫描中转 ProgressView、未扫描只有说明文字"（HomeView 健康分环的占位保留）；磁贴等高在 P2 已做。
+- **判断为"足够/不做"并记录**：§2.2 受保护项已经"禁用勾选+给原因"（满足要求，未再拆独立"已跳过"分区）；§2.5 缺的 `/Library/LaunchDaemons`、`/private/var/db/receipts` 是 root 属主（非 root 删不掉，列出来反而误导）、Group Containers 共享数据误删风险大（沿用既有安全决策跳过）；§2.6 sparkline 其实已是真实 60 秒环形缓冲+每秒采样（`StatusViewModel` 确认），用户看到的"直线"是冷启动头几秒点少，非 bug。
+- **验证**：`swift test` 146/146；Debug/Release 构建通过；`nm` 确认 Release `SnapshotHarness` 零符号；离屏渲染确认欢迎页（安全承诺+FDA）、FDA 横幅（琥珀不刺眼）、构建产物 hero 无虚线环+填充更淡；`cp` 重装 `/Applications/净山.app` 冒烟无 crash。**改动未提交、未发版**（等用户确认是否发 0.8.1）。
+- ⚠️ M24 用户选择"先不提交，我先走查"——改动留在工作树，下一轮（M25）继续在其上叠加。
+
+## 续二十二（M25：新增功能+精修 提示词 — 视觉统一批次 A2/PartC/A5.1）
+用户提供 `净山_新增功能+精修提示词.md`（能力扩展轮：Part A 7 项 + Part B 建议 + Part C 小修）。明确要求"先做 A6+A2（视觉统一）与 A5（来源字典+强力模式，防误删），完成后发我看效果再继续"。因 A5.2 强力模式是会改删除面的安全敏感功能，决定拆成两批：本轮做**视觉统一 + A5.1（来源字典，纯加标注不改删除行为）**，A5.2 强力模式留待专门一轮（安全 > 功能）。
+- **A2 顶部分段胶囊导航**：`TopNavBar` 套 `InkPalette.track`（#ECEAE3）浅色胶囊轨道，选中项是一枚绿色实心胶囊，用 `@Namespace` + `matchedGeometryEffect(id:"selectedPill")` 在标签间**滑动**（mole 那种精致感）；spring 动画、Reduce Motion 降级。新增 `InkPalette.track`。
+- **Part C 顺手修**：①卸载页"刷新"从模块红改中性（`.tint(.secondary)`，红只留给"卸载"）。②**清理复选框系统蓝→模块色**——根因是 macOS 原生 `.checkbox` 样式忽略 `.tint` 恒用系统蓝；新建 `ModuleCheckboxToggleStyle`（自绘 checkmark，吃传入 tint），`CategoryRow` 加 `tint` 参数，四个模块行（Clean 绿/Docker 蓝/Purge 赭/Uninstaller 红）各传自己的色；`TriStateCheckbox`（分组全选）也从 `Color.accentColor` 改成可传入 tint。③首页概览三列 P2 已做。④"…"菜单已有内容（设置/关于/检查更新），"清理历史/主题切换"待 A1/主题功能落地再加。
+- **A5.1 来源字典**：审计发现 M6 的分类系统已覆盖大部分——每项有友好 App 名（来源）、按类别分组、每组有安全说明（`groupDescription`，清理页分组头已展示）、未识别→`.other`→**默认不勾**。只补一处：未匹配的原始名从直接显示改成"**未识别来源（原名）**"标签（`CacheItemClassifier` 兜底分支），让黑箱更醒目；同步改 1 个测试断言。
+- **验证**：`swift test` 146/146；Debug/Release 构建通过；`nm` Release 零 harness 符号；离屏渲染确认——`topnav.png` 分段胶囊轨道+绿色选中胶囊、`checkboxes.png` 复选框全模块色（绿/赭）无系统蓝+未识别项默认不勾+受保护项禁用带 caution 图标；重装 `/Applications/净山.app` 冒烟无 crash。**改动未提交、未发版。**
+- **本轮未做（明确留待下一轮，已告知用户）**：A5.2 强力模式（安全敏感，需专门一轮逐项核对废纸篓/受保护拦截/新发现项不预选）、A1 累计清理历史、A3 监控扩展、A4 菜单栏托盘、B1 大文件查找、A6 其余细项（8pt 网格全站走查、更多微交互）。
+
+## 续二十三（M25 续：A5.2 强力模式，防误删为重点）
+用户"继续做，最后给我成品我看一下"。做 A5.2 强力模式，安全框架优先：
+- **`CacheGroup` 加 `.deepScan` 组**（displayName "深度扫描"、description 明确"默认全部不勾选，逐项确认"、`defaultSelected=false`、图标 scope）。`CacheItemClassifier` 把 `deepCaches` 分类归入 `.deepScan`。
+- **`DeepCacheScanner`（新）**：只扫**已知安全、可再生成、且都在 `~/Library/Caches` 之外**（不与 UserCacheScanner 通用遍历重复计数）的位置——已保存窗口状态、Yarn Berry/pnpm/Bun/Go 模块下载/CocoaPods/Puppeteer 缓存。刻意不做"未知即删"。
+- **`ScanCoordinator` 加 `deep` 开关**：`deepScanners` 单独一组，`scan(deep:)` 只在深度模式追加；普通扫描永不触及。
+- **`CleanViewModel` 安全约束**：加 `strongMode`（默认关，session 态不持久化，更安全）；`startScan` 传 `deep: strongMode`；**关键——`upsert` 里 `if !strongMode` 才做默认勾选，即强力模式一律不预选任何项**（比提示词"深度项不预选"更严，普通项也要手动勾）。删除路径完全不变（仍走 `DeletionEngine`→废纸篓 + 关键路径 denylist）。
+- **`CleanView` UI**：hero 加"强力模式"开关（`.switch`，开启弹说明"仅扫已知安全位置/一律不预选/受保护路径任何模式都不清理/仍先进废纸篓可恢复"，切换即重扫）；`CleanGroupSectionView` 里**强力模式下禁用整组"全选"三态框**（满足"不提供全选"），并给分组三态框传 cleanAccent。
+- **验证**：新增 `StrongModeScanTests`（4 条：普通扫描不跑 deep / deep 追加 deep / `.deepScan` 默认不勾 / deepCaches 归 `.deepScan`）；`swift test` **150/150**；Debug/Release 构建通过、`nm` 零 harness 符号；重装 `/Applications/净山.app` 冒烟无 crash。**改动未提交、未发版。**
+- 剩余（下一轮）：A1 累计历史 + B2 一键恢复、A3 监控扩展、A4 菜单栏托盘、B1 大文件查找。
+
+## 续二十四（M25 续：A1 累计清理历史 + B2 一键恢复）
+用户"接着做"。做 A1+B2（信任功能：可追溯"删了什么" + 从废纸篓恢复）：
+- **`App/CleanupHistory.swift`（新）**：`TrashedItem{originalPath,trashPath}` + `CleanupRecord{id,date,module,freedBytes,itemCount,trashedItems,restored}` + `CleanupHistoryStore`（`@MainActor @Observable` 单例，JSON 持久化到 `~/Library/Application Support/Jingshan/cleanup-history.json`，最多留 100 条，newest-first，纯本地不上传）。`totalFreedBytes`/`totalCleanupCount` 供首页汇总。
+- **B2 恢复（非破坏性）**：`restore(record)` 把该次移入废纸篓的项**移回原位置**——只在"源仍在废纸篓 且 原位置当前为空"时才移（**绝不覆盖**），需要时补建父目录，返回 restored/failed 计数；成功后标记 record.restored。恢复是"往回加文件"，不涉及删除，安全。
+- **记录接线**：Clean/Purge/Uninstall 三个 `performCleanup` 在删除循环里从 `.movedToTrash(_, resultingURL, size)` 收集 `TrashedItem`（原路径来自被删项，废纸篓路径来自引擎回传的 resultingURL），`!isDryRun` 时调 `CleanupHistoryStore.shared.record(module:…)`。永久删除项不进 trashedItems（不可恢复，如实）。Docker 未接（运行时走 CLI、宿主数据可后续再加）。
+- **UI**：首页底部加 `CumulativeHistoryCard`（"累计已释放 X · 共 N 次清理"，等宽数字 + `contentTransition(.numericText())` 滚动动画，副文案"每次清理都可从废纸篓一键恢复 · 记录仅保存在本机"）+ "清理历史"按钮 → `CleanupHistoryView` sheet（按时间倒序列每次清理：模块图标/释放体积/日期/项数/可恢复数，每条一个"一键恢复"按钮，恢复后显示"已恢复"、纯永久删除的显示"不可恢复"；顶部总计 + 清空记录；恢复结果弹 alert）。
+- **验证**：`swift test` 150/150；Debug/Release 构建通过、`nm` 零 harness；离屏渲染 `home.png` 确认累计卡片（"累计已释放 48.6 GB · 共 12 次清理" + 清理历史按钮）；重装 `/Applications/净山.app` 冒烟无 crash。**改动未提交、未发版。**
+- **说明**：`CleanupHistoryStore` 是 App 层（非 JingshanCore），当前无 App 测试 target，恢复逻辑靠防御式代码（只从废纸篓移回、不覆盖）+ 真机验证；`CleanupHistoryView` 的记录行离屏渲染看不到（本机暂无历史记录，且含 List/Button），需真机确认。
+- 剩余（下一轮，按 §D）：A3 状态监控扩展、A4 菜单栏托盘、B1 大文件查找。
+
+## 续二十五（M26：B1 大文件查找 + A4 菜单栏托盘 + A3 监控扩展 — 提示词剩余 Part A/B 全做完）
+用户"接着做，全部完成后输出成品"。一轮做完剩余三块：
+- **B1 大文件/旧文件查找（新模块，最高 ROI）**：`JingshanCore/LargeFiles/LargeFileScanner`（`FileManager.enumerator` 走目录，`.skipsHiddenFiles`+`.skipsPackageDescendants`，跳符号链接，`totalFileAllocatedSize` 实际占用即稀疏安全，默认阈值 100 MB，>180 天未访问标 `isOld`，可取消+进度回调，按大小降序）。新增 `AppTab.largeFiles`（花青 coolCyan）+ `LargeFilesViewModel` + `LargeFilesView`（hero + 选择目录 `NSOpenPanel` + 高风险列表 CategoryRow 标 `.caution`+"这是你自己的文件"/最近打开/很久未使用 + ConfirmSheetShell 额外提示 + 完成弹「打开废纸篓」）。**安全**：删你自己的文件是高风险 → **一项都不预选**，走 `DeletionEngine`→废纸篓+denylist，接 `CleanupHistoryStore(module:"大文件")` 可一键恢复。1 条单测。
+- **A4 菜单栏托盘（MenuBarExtra）**：`App/MenuBarExtraScene.swift`——`MenuBarViewModel.shared`（节流 3s 采样，低占用）+ `MenuBarLabel`（山峰 logo 或 CPU% 文字，设置可选）+ `MenuBarContentView`（CPU/内存/磁盘迷你条 + 电池 + 「打开净山」`openWindow(id:"main")` + 退出）。`JingshanApp` 加 `MenuBarExtra(isInserted:$settings.menuBarEnabled).menuBarExtraStyle(.window)`，`WindowGroup(id:"main")`。`AppDelegate`：`applicationShouldTerminateAfterLastWindowClosed` 改成 `!menuBarEnabled`——开托盘则关窗后常驻菜单栏。设置页加「菜单栏」区（开关 + 图标样式）。AppSettings 加 `menuBarEnabled`（默认 true）/`menuBarShowsPercent`。
+- **A3 状态监控扩展（可靠子集 + 优雅降级）**：`JingshanCore/Metrics/SystemInfo`（sysctl `hw.model`/`getloadavg`/ProcessInfo：机型/系统/核心/内存/开机时长/负载）+ `ProcessLister`（shell `/bin/ps -Aceo pid,pcpu,pmem,comm -r` 取 Top 进程，只读）。`StatusViewModel` 加 `systemInfo`（每 tick）+ `topProcesses`（每 2 tick，ps 是子进程）。`StatusView` 加 3 张 Bento 卡：`PerCoreCard`（每核心占用，数据本来就采了）、`SystemInfoCard`、`TopProcessesCard`。**GPU/温度/风扇/SMART 按既定决策不做（无可靠公开 API，优雅缺席）**，提示词也允许"取不到优雅降级"。
+- **验证**：`swift test` **151/151**（+LargeFileScanner）；Debug/Release 构建通过、`nm` 零 harness；离屏渲染确认——status.png（每核心 8 条+系统信息+Top 进程，全 Bento 底对齐）、largefiles.png（花青 hero+空态）、menubar.png（面板结构，指标"正在采集"因离屏无实时采样）、topnav.png（7 标签胶囊不挤）；重装 `/Applications/净山.app` 冒烟无 crash。**改动未提交、未发版。**
+- **说明/小遗留**：大文件 hero 暂借用 status 水墨诗句（"登高望远，万象有序"，未加专属 motif，可后续补）；菜单栏"CPU%"图标样式与常驻采样需真机看；A3 的点击卡片展开详情、内存 swap 分解、网络分接口/连接数、SMART 未做（可后续）。至此提示词 Part A（A1–A6）+ Part B（B1/B2）核心全部落地，Part C 也早已修完。

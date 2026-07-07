@@ -13,6 +13,7 @@ struct DockerItemRow: View {
             riskNote: item.riskNote,
             sizeText: item.sizeBytes.map(ByteFormatter.string(fromBytes:)),
             isSelected: viewModel.isSelected(item),
+            tint: InkPalette.dockerAccent,
             onToggle: { viewModel.setSelected(item, $0) }
         )
     }

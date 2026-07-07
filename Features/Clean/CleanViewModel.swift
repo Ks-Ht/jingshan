@@ -48,6 +48,14 @@ final class CleanViewModel {
     var selectedItemIDs: Set<String> = []
     var lastCleanupSummary: CleanupSummary?
 
+    /// Strong ("强力") mode: scans additional known-safe-but-edge locations.
+    /// Default OFF. Critical safety property: while on, NOTHING is
+    /// pre-selected — every item (routine and deep) must be ticked by hand —
+    /// so a deeper scan can never expand what gets deleted without explicit
+    /// per-item review. The critical-path denylist and Trash routing are
+    /// unchanged and still apply in this mode.
+    var strongMode = false
+
     private let coordinator = ScanCoordinator()
     private let protectionEvaluator = ProtectionEvaluator()
     private let classifier = CacheItemClassifier()
@@ -96,8 +104,9 @@ final class CleanViewModel {
         lastCleanupSummary = nil
         isScanning = true
 
+        let deep = strongMode
         scanTask = Task {
-            _ = await coordinator.scan { [weak self] category in
+            _ = await coordinator.scan(deep: deep) { [weak self] category in
                 // `onCategoryComplete` runs on `ScanCoordinator`'s own
                 // isolation, not MainActor — hop back explicitly before
                 // touching view-model state.
@@ -152,11 +161,18 @@ final class CleanViewModel {
         var deleted = 0
         var skipped = 0
         var failed = 0
+        var trashed: [TrashedItem] = []
 
         for item in selectedItems {
             let outcome = engine.delete(path: item.path, mode: mode, associatedBundleIdentifier: item.ownerAppBundleID)
             switch outcome {
-            case .movedToTrash(_, _, let size), .permanentlyDeleted(_, let size):
+            case .movedToTrash(_, let resultingURL, let size):
+                freed += size ?? 0
+                deleted += 1
+                if let resultingURL {
+                    trashed.append(TrashedItem(originalPath: item.path, trashPath: resultingURL.path))
+                }
+            case .permanentlyDeleted(_, let size):
                 freed += size ?? 0
                 deleted += 1
             case .wouldDelete(_, let size):
@@ -173,6 +189,9 @@ final class CleanViewModel {
         }
 
         lastCleanupSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
+        if !isDryRun {
+            CleanupHistoryStore.shared.record(module: "清理", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
+        }
         selectedItemIDs.removeAll()
         startScan()
     }
@@ -237,7 +256,10 @@ final class CleanViewModel {
             categories.append(annotated)
         }
 
-        if annotated.id != Self.trashCategoryID {
+        // Strong mode pre-selects NOTHING — every item must be reviewed and
+        // ticked by hand, so a deeper scan can never silently widen the delete
+        // set. Normal mode keeps the conservative per-group defaults.
+        if !strongMode, annotated.id != Self.trashCategoryID {
             for item in annotated.items where !item.isProtected {
                 let (_, group) = classifier.classify(item: item, scannerCategoryID: annotated.id)
                 if group.defaultSelected {

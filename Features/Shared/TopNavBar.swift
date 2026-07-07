@@ -14,6 +14,7 @@ import SwiftUI
 struct TopNavBar: View {
     @Binding var selection: AppTab
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var pillNamespace
 
     private let trafficLightInset: CGFloat = 78
 
@@ -22,15 +23,20 @@ struct TopNavBar: View {
         // as part of the same cluster.
         HStack(spacing: 12) {
             brand
-            HStack(spacing: 4) {
+            // Segmented-pill track: the selected tab is a single filled capsule
+            // that slides between labels via `matchedGeometryEffect` — the
+            // mole-style precision cue — over a recessed track.
+            HStack(spacing: 2) {
                 ForEach(AppTab.allCases) { tab in
-                    TabPill(tab: tab, isSelected: selection == tab) {
-                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                    TabPill(tab: tab, isSelected: selection == tab, namespace: pillNamespace) {
+                        withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.82)) {
                             selection = tab
                         }
                     }
                 }
             }
+            .padding(3)
+            .background(InkPalette.track, in: Capsule())
             Spacer(minLength: 8)
             overflowMenu
         }
@@ -90,6 +96,7 @@ struct TopNavBar: View {
 private struct TabPill: View {
     let tab: AppTab
     let isSelected: Bool
+    let namespace: Namespace.ID
     let action: () -> Void
 
     @State private var isHovering = false
@@ -101,12 +108,16 @@ private struct TabPill: View {
                 .foregroundStyle(isSelected ? InkPalette.accent : Color.secondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(
-                    isSelected
-                        ? InkPalette.accent.opacity(0.14)
-                        : (isHovering ? Color.primary.opacity(0.05) : Color.clear),
-                    in: Capsule()
-                )
+                .background {
+                    if isSelected {
+                        // One shared capsule that slides between tabs.
+                        Capsule()
+                            .fill(InkPalette.accent.opacity(0.16))
+                            .matchedGeometryEffect(id: "selectedPill", in: namespace)
+                    } else if isHovering {
+                        Capsule().fill(Color.primary.opacity(0.05))
+                    }
+                }
                 .contentShape(Capsule())
         }
         .buttonStyle(.plain)

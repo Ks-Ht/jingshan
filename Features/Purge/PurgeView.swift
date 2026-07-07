@@ -34,6 +34,12 @@ struct PurgeView: View {
                 set: { if !$0 { viewModel.lastCleanupSummary = nil } }
             )
         ) {
+            if let summary = viewModel.lastCleanupSummary, !summary.dryRun, summary.freedBytes > 0 {
+                Button("打开废纸篓") {
+                    SystemActions.openTrash()
+                    viewModel.lastCleanupSummary = nil
+                }
+            }
             Button("好") { viewModel.lastCleanupSummary = nil }
         } message: {
             if let summary = viewModel.lastCleanupSummary {
@@ -168,8 +174,14 @@ struct PurgeView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                } else if viewModel.isScanning {
+                    // Spin only while actually scanning — no dashed "--" ring
+                    // that reads as broken before a scan has run.
+                    ProgressView().controlSize(.large)
+                    Text("正在扫描构建产物…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else {
-                    RingGaugePlaceholder(diameter: 88, lineWidth: 8)
                     Text("扫描项目目录中的构建产物")
                         .font(.caption)
                         .foregroundStyle(.secondary)

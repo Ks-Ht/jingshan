@@ -192,8 +192,12 @@ struct DockerView: View {
                     )
                     Text("已选中 \(Int(fraction * 100))%")
                         .font(.subheadline.weight(.semibold))
+                } else if viewModel.isScanning {
+                    ProgressView().controlSize(.large)
+                    Text("正在扫描 Docker 数据…")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 } else {
-                    RingGaugePlaceholder(diameter: 88, lineWidth: 8)
                     Text("扫描 Docker 磁盘数据与运行时资源")
                         .font(.caption)
                         .foregroundStyle(.secondary)

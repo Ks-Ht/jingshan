@@ -27,7 +27,9 @@ struct UserCacheScannerTests {
 
         let bundleItem = try #require(category.items.first { $0.path == bundleFolder.path })
         #expect(bundleItem.ownerAppBundleID == "com.example.App")
-        #expect(bundleItem.sizeBytes == 10)
+        // Scanner sums actual on-disk allocation (block-rounded), not logical
+        // bytes, so compare against the fixture file's allocated size.
+        #expect(bundleItem.sizeBytes == FileSizeCalculator.allocatedSize(ofPath: bundleFolder.appendingPathComponent("cache.db").path))
 
         let plainItem = try #require(category.items.first { $0.path == plainFolder.path })
         #expect(plainItem.ownerAppBundleID == nil)

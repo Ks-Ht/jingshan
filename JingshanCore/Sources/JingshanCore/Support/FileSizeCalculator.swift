@@ -34,21 +34,22 @@ public enum FileSizeCalculator {
         }
 
         if !isDirectory.boolValue {
-            let attributes = try? fileManager.attributesOfItem(atPath: path)
-            return (attributes?[.size] as? NSNumber)?.int64Value
+            return allocatedSize(ofPath: path)
         }
 
         guard let enumerator = fileManager.enumerator(atPath: path) else {
             return nil
         }
 
+        // Sum actual on-disk allocation per file (not logical `.fileSize`), so
+        // the total is "space you'd actually reclaim" — block-rounded for many
+        // small files, and correct (not inflated) for sparse files.
         var total: Int64 = 0
         for case let name as String in enumerator {
             let fullPath = (path as NSString).appendingPathComponent(name)
-            guard let attributes = try? fileManager.attributesOfItem(atPath: fullPath) else { continue }
-            if (attributes[.type] as? FileAttributeType) != .typeDirectory {
-                total += (attributes[.size] as? NSNumber)?.int64Value ?? 0
-            }
+            var isDir: ObjCBool = false
+            guard fileManager.fileExists(atPath: fullPath, isDirectory: &isDir), !isDir.boolValue else { continue }
+            total += allocatedSize(ofPath: fullPath) ?? 0
         }
         return total
     }
@@ -67,8 +68,7 @@ public enum FileSizeCalculator {
         }
 
         if !isDirectory.boolValue {
-            let attributes = try? fileManager.attributesOfItem(atPath: path)
-            return (attributes?[.size] as? NSNumber)?.int64Value
+            return allocatedSize(ofPath: path)
         }
 
         guard let enumerator = fileManager.enumerator(atPath: path) else {
@@ -81,6 +81,8 @@ public enum FileSizeCalculator {
         // cooperative cancellation checks below.
         let names = enumerator.allObjects as? [String] ?? []
 
+        // Sum actual on-disk allocation per file (not logical `.fileSize`) — the
+        // real reclaimable-space figure, and sparse-file-safe.
         var total: Int64 = 0
         var checked = 0
         for name in names {
@@ -90,10 +92,9 @@ public enum FileSizeCalculator {
                 await Task.yield()
             }
             let fullPath = (path as NSString).appendingPathComponent(name)
-            guard let attributes = try? fileManager.attributesOfItem(atPath: fullPath) else { continue }
-            if (attributes[.type] as? FileAttributeType) != .typeDirectory {
-                total += (attributes[.size] as? NSNumber)?.int64Value ?? 0
-            }
+            var isDir: ObjCBool = false
+            guard fileManager.fileExists(atPath: fullPath, isDirectory: &isDir), !isDir.boolValue else { continue }
+            total += allocatedSize(ofPath: fullPath) ?? 0
         }
         return total
     }

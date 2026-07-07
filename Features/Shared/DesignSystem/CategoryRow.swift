@@ -46,6 +46,9 @@ struct CategoryRow: View {
     var isSelected: Bool
     var isDisabled: Bool = false
     var disabledReason: String?
+    /// Module accent for the checkbox fill (macOS's native `.checkbox` style
+    /// ignores `.tint`, rendering system-blue; this keeps checkmarks on-brand).
+    var tint: Color = InkPalette.accent
     let onToggle: (Bool) -> Void
 
     var body: some View {
@@ -78,7 +81,7 @@ struct CategoryRow: View {
                     }
                 }
             }
-            .toggleStyle(.checkbox)
+            .toggleStyle(ModuleCheckboxToggleStyle(tint: tint, isDisabled: isDisabled))
             .disabled(isDisabled)
             // Explicit label so the trailing size (outside the Toggle's own
             // label content) reads as part of the same VoiceOver element,
@@ -116,5 +119,32 @@ struct CategoryRow: View {
         }
         parts.append(sizeText ?? "大小未知")
         return parts.joined(separator: "，")
+    }
+}
+
+/// A checkbox toggle whose checkmark uses a passed-in module tint. macOS's
+/// native `.checkbox` toggle style paints with the system accent (blue) and
+/// ignores SwiftUI `.tint(_:)`, which broke the app's "every module is its own
+/// color, never system blue" rule — this restores control over the fill while
+/// keeping the leading-checkbox layout and full toggle semantics.
+struct ModuleCheckboxToggleStyle: ToggleStyle {
+    var tint: Color
+    var isDisabled: Bool = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                .imageScale(.large)
+                .foregroundStyle(checkboxColor(isOn: configuration.isOn))
+                .contentShape(Rectangle())
+                .onTapGesture { if !isDisabled { configuration.isOn.toggle() } }
+                .accessibilityHidden(true) // the whole row carries a combined label
+            configuration.label
+        }
+    }
+
+    private func checkboxColor(isOn: Bool) -> Color {
+        if isDisabled { return Color.secondary.opacity(0.4) }
+        return isOn ? tint : Color.secondary
     }
 }

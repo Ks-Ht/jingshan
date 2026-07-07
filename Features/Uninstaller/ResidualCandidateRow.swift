@@ -13,6 +13,7 @@ struct ResidualCandidateRow: View {
             riskNote: candidate.riskNote,
             sizeText: candidate.sizeBytes.map(ByteFormatter.string(fromBytes:)),
             isSelected: viewModel.isResidualSelected(candidate),
+            tint: InkPalette.uninstallerAccent,
             onToggle: { viewModel.setResidualSelected(candidate, $0) }
         )
     }

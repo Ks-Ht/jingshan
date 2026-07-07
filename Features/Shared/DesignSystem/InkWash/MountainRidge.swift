@@ -53,8 +53,11 @@ struct MountainSilhouette: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            MountainRidge().fill(tint.opacity(0.09))
-            MountainRidgeLine().stroke(tint.opacity(0.20), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+            // Very faint fill (0.06) so action buttons read as floating on clean
+            // paper, not sitting on a colored band; the thin ridge line carries
+            // the shape.
+            MountainRidge().fill(tint.opacity(0.06))
+            MountainRidgeLine().stroke(tint.opacity(0.18), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
         }
         .frame(height: height)
         .frame(maxWidth: .infinity)

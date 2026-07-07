@@ -119,10 +119,17 @@ final class UninstallerViewModel {
         var deleted = 0
         var skipped = 0
         var failed = 0
+        var trashed: [TrashedItem] = []
 
-        func apply(_ outcome: DeletionOutcome) {
+        func apply(_ outcome: DeletionOutcome, originalPath: String) {
             switch outcome {
-            case .movedToTrash(_, _, let size), .permanentlyDeleted(_, let size), .wouldDelete(_, let size):
+            case .movedToTrash(_, let resultingURL, let size):
+                freed += size ?? 0
+                deleted += 1
+                if let resultingURL {
+                    trashed.append(TrashedItem(originalPath: originalPath, trashPath: resultingURL.path))
+                }
+            case .permanentlyDeleted(_, let size), .wouldDelete(_, let size):
                 freed += size ?? 0
                 deleted += 1
             case .alreadyAbsent:
@@ -139,7 +146,7 @@ final class UninstallerViewModel {
         // filesystem mutation — not just the earlier scan-time check, in
         // case the app was relaunched in between. Never overridable: an
         // uninstall must never force through a live app's own files.
-        apply(engine.delete(path: app.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier))
+        apply(engine.delete(path: app.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier), originalPath: app.path)
 
         // Docker Desktop's sandbox container (~/Library/Containers/com.docker.docker)
         // isn't ordinary leftover data — it holds the entire VM disk backing
@@ -165,10 +172,13 @@ final class UninstallerViewModel {
                 skipped += 1
                 continue
             }
-            apply(engine.delete(path: candidate.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier))
+            apply(engine.delete(path: candidate.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier), originalPath: candidate.path)
         }
 
         lastUninstallSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
+        if !isDryRun {
+            CleanupHistoryStore.shared.record(module: "卸载应用", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
+        }
         selectedApp = nil
         residualCandidates = []
         selectedResidualIDs = []

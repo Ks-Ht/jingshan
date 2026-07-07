@@ -6,9 +6,36 @@ struct SettingsView: View {
     @State private var settings = AppSettings.shared
     @State private var exclusionSelection: String?
     @State private var purgePathSelection: String?
+    @State private var hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
 
     var body: some View {
         Form {
+            Section {
+                HStack(spacing: 10) {
+                    Image(systemName: hasFullDiskAccess ? "checkmark.seal.fill" : "exclamationmark.triangle.fill")
+                        .foregroundStyle(hasFullDiskAccess ? InkPalette.accent : InkPalette.statusAccent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(hasFullDiskAccess ? "已授权" : "未授权")
+                            .font(.callout.weight(.semibold))
+                        Text(hasFullDiskAccess
+                            ? "净山可以正常扫描系统各处的缓存与残留。"
+                            : "没有该权限时，~/Library/Caches、其他应用数据等位置会扫不到或读到 0，扫描结果不准。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer()
+                }
+                if !hasFullDiskAccess {
+                    HStack {
+                        Button("打开系统设置") { PermissionActions.openFullDiskAccessSettings() }
+                        Button("授权后重启净山") { PermissionActions.relaunch() }
+                    }
+                }
+            } header: {
+                Label("完全磁盘访问权限", systemImage: "lock.shield")
+            }
+
             Section {
                 Toggle("预览模式（Dry Run）", isOn: $settings.dryRunEnabled)
                 Text("开启后，清理、Docker、构建产物操作都只会显示“将会清理什么”，不会真正删除任何东西。适合先确认一遍再动手。")
@@ -16,6 +43,22 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             } header: {
                 Label("安全", systemImage: "lock.shield")
+            }
+
+            Section {
+                Toggle("在菜单栏显示监控", isOn: $settings.menuBarEnabled)
+                if settings.menuBarEnabled {
+                    Picker("菜单栏图标", selection: $settings.menuBarShowsPercent) {
+                        Text("山峰标志").tag(false)
+                        Text("CPU 占用 %").tag(true)
+                    }
+                    .pickerStyle(.menu)
+                }
+                Text("开启后净山会常驻菜单栏，可随时查看 CPU/内存/磁盘/电池并快速打开主窗口；关闭窗口不退出。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Label("菜单栏", systemImage: "menubar.rectangle")
             }
 
             Section {
@@ -79,6 +122,9 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 480, height: 560)
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
+        }
     }
 
     private func addExclusionPath() {

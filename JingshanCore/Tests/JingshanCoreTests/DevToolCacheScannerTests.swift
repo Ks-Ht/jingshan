@@ -21,6 +21,7 @@ struct DevToolCacheScannerTests {
 
         #expect(category.items.count == 1)
         #expect(category.items.first?.resolvedDisplayLabel == "Xcode DerivedData")
-        #expect(category.items.first?.sizeBytes == 10)
+        // Actual on-disk allocation (block-rounded), not logical bytes.
+        #expect(category.items.first?.sizeBytes == FileSizeCalculator.allocatedSize(ofPath: derivedData.appendingPathComponent("build.log").path))
     }
 }

@@ -77,7 +77,9 @@ struct CacheItemClassifierTests {
             item: makeItem(path: "/Users/me/Library/Caches/SomeGenericCache"),
             scannerCategoryID: "userCaches"
         )
-        #expect(result.displayName == "SomeGenericCache")
+        // Unrecognized names are explicitly labeled as unidentified (and land
+        // in `.other`, which defaults to unselected).
+        #expect(result.displayName == "未识别来源（SomeGenericCache）")
         #expect(result.group == .other)
     }
 }

@@ -18,7 +18,8 @@ struct TrashScannerTests {
         let category = await scanner.scan()
 
         #expect(category.items.count == 1)
-        #expect(category.items.first?.sizeBytes == 10)
+        // Actual on-disk allocation (block-rounded), not logical bytes.
+        #expect(category.items.first?.sizeBytes == FileSizeCalculator.allocatedSize(ofPath: trash.appendingPathComponent("deleted-file.txt").path))
         #expect(category.items.first?.resolvedDisplayLabel == "废纸篓")
     }
 

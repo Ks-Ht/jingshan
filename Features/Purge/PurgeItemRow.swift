@@ -14,6 +14,7 @@ struct PurgeItemRow: View {
             sizeText: candidate.sizeBytes.map(ByteFormatter.string(fromBytes:)),
             isSelected: viewModel.isSelected(candidate),
             disabledReason: candidate.isRecent ? "7 天内修改过，默认不勾选" : nil,
+            tint: InkPalette.purgeAccent,
             onToggle: { viewModel.setSelected(candidate, $0) }
         )
     }

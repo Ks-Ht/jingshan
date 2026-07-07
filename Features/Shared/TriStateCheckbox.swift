@@ -11,12 +11,15 @@ enum TriState {
 /// the group can be fully, partially, or not at all selected.
 struct TriStateCheckbox: View {
     let state: TriState
+    /// Module accent for the checked/partial fill — `Color.accentColor` would
+    /// paint system-blue and ignore the app's per-module color rule.
+    var tint: Color = InkPalette.accent
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: iconName)
-                .foregroundStyle(state == .off ? Color.secondary : Color.accentColor)
+                .foregroundStyle(state == .off ? Color.secondary : tint)
                 .imageScale(.large)
         }
         .buttonStyle(.plain)

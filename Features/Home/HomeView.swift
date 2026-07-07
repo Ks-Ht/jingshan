@@ -16,6 +16,9 @@ struct HomeView: View {
     let onOpen: (AppTab) -> Void
     let onHealthCheck: () -> Void
 
+    @State private var history = CleanupHistoryStore.shared
+    @State private var showingHistory = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
@@ -44,10 +47,19 @@ struct HomeView: View {
                     memory: statusVM.hasSampledOnce ? statusVM.snapshot.memory.usedPercent : nil,
                     disk: statusVM.hasSampledOnce ? statusVM.snapshot.disk.usedPercent : nil
                 )
+
+                CumulativeHistoryCard(
+                    totalBytes: history.totalFreedBytes,
+                    count: history.totalCleanupCount,
+                    onOpenHistory: { showingHistory = true }
+                )
             }
             .padding(16)
         }
         .tint(InkPalette.accent) // green brand accent for all controls (e.g. "前往清理"), not system blue
+        .sheet(isPresented: $showingHistory) {
+            CleanupHistoryView(onClose: { showingHistory = false })
+        }
         // Sampling is started/stopped by RootView based on the active tab, not
         // here — Home and Status share one `statusVM`, and toggling it from
         // both views' appear/disappear races during a cross-fade tab switch.
@@ -314,6 +326,41 @@ private struct OverviewCell: View {
     }
 }
 
+// MARK: - Cumulative cleanup history (A1)
+
+private struct CumulativeHistoryCard: View {
+    let totalBytes: Int64
+    let count: Int
+    let onOpenHistory: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "clock.arrow.circlepath")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(InkPalette.accent)
+                .frame(width: 34, height: 34)
+                .background(InkPalette.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
+            VStack(alignment: .leading, spacing: 2) {
+                (Text("累计已释放 ")
+                    + Text(ByteFormatter.string(fromBytes: totalBytes))
+                        .foregroundColor(InkPalette.accent).fontWeight(.semibold)
+                    + Text(" · 共 \(count) 次清理"))
+                    .font(.subheadline)
+                    .monospacedDigit()
+                    .contentTransition(.numericText())
+                Text("每次清理都可从废纸篓一键恢复 · 记录仅保存在本机")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            Button("清理历史") { onOpenHistory() }
+                .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .homeCard()
+    }
+}
+
 // MARK: - Shared card chrome
 
 private extension View {
@@ -355,6 +402,7 @@ struct HomeSnapshotContent: View {
                 ModuleTile(tab: .status, name: "状态", value: .data("26%"), onOpen: { _ in })
             }
             SystemOverviewCard(cpu: 26, memory: 73, disk: 52)
+            CumulativeHistoryCard(totalBytes: 48_600_000_000, count: 12, onOpenHistory: {})
         }
         .padding(16)
         .background(InkPalette.paper)

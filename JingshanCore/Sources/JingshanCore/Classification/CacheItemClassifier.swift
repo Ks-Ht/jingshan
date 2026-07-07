@@ -23,6 +23,10 @@ public struct CacheItemClassifier: Sendable {
             return (item.resolvedDisplayLabel, .devTools)
         case "browserCaches":
             return (item.resolvedDisplayLabel, .browser)
+        case "deepCaches":
+            // Strong-mode finds get their own group (default-off) so they're
+            // visibly separated from the routine, pre-selected categories.
+            return (item.resolvedDisplayLabel, .deepScan)
         default:
             let rawName = (item.path as NSString).lastPathComponent
             if let match = catalog.classify(name: rawName) {
@@ -34,7 +38,10 @@ public struct CacheItemClassifier: Sendable {
             if ScanningSupport.looksLikeBundleIdentifier(rawName) {
                 return (rawName, .appCache)
             }
-            return (rawName, .other)
+            // Couldn't attribute this to any known app/system source. Label it
+            // explicitly as unidentified (it lands in `.other`, which defaults
+            // to unselected) so the user never silently deletes a black box.
+            return ("未识别来源（\(rawName)）", .other)
         }
     }
 }

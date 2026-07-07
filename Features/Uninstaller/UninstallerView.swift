@@ -80,6 +80,12 @@ struct UninstallerView: View {
                 set: { if !$0 { viewModel.lastUninstallSummary = nil } }
             )
         ) {
+            if let summary = viewModel.lastUninstallSummary, !summary.dryRun, summary.freedBytes > 0 {
+                Button("打开废纸篓") {
+                    SystemActions.openTrash()
+                    viewModel.lastUninstallSummary = nil
+                }
+            }
             Button("好") { viewModel.lastUninstallSummary = nil }
         } message: {
             if let summary = viewModel.lastUninstallSummary {
@@ -104,7 +110,10 @@ struct UninstallerView: View {
                 if viewModel.isScanningApps {
                     ProgressView().controlSize(.small)
                 } else {
+                    // Neutral, not the module red — red is reserved for the
+                    // destructive "卸载" action so refresh doesn't read as risky.
                     Button("刷新") { viewModel.startScan() }
+                        .tint(.secondary)
                 }
             }
             .padding(.horizontal, 10)

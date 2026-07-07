@@ -10,6 +10,7 @@ public enum CacheGroup: String, CaseIterable, Sendable, Codable {
     case aiTools
     case browser
     case communication
+    case deepScan
     case other
     case trash
 
@@ -20,6 +21,7 @@ public enum CacheGroup: String, CaseIterable, Sendable, Codable {
         case .aiTools: return "AI 工具"
         case .browser: return "浏览器"
         case .communication: return "通信工具"
+        case .deepScan: return "深度扫描"
         case .other: return "其他"
         case .trash: return "废纸篓"
         }
@@ -32,6 +34,7 @@ public enum CacheGroup: String, CaseIterable, Sendable, Codable {
         case .aiTools: return "AI 工具的临时缓存，对话记录和项目文件不受影响"
         case .browser: return "浏览器缓存，登录状态和历史记录会保留"
         case .communication: return "聊天软件缓存，可能包含尚未备份的图片和文件，请确认后再清理"
+        case .deepScan: return "强力模式扫描到的更深/边缘缓存，默认全部不勾选，请逐项确认后再清理"
         case .other: return "系统组件或未识别来源的缓存"
         case .trash: return "永久清空废纸篓"
         }
@@ -44,6 +47,7 @@ public enum CacheGroup: String, CaseIterable, Sendable, Codable {
         case .aiTools: return "sparkles"
         case .browser: return "globe"
         case .communication: return "message"
+        case .deepScan: return "scope"
         case .other: return "shippingbox"
         case .trash: return "trash"
         }
@@ -63,7 +67,7 @@ public enum CacheGroup: String, CaseIterable, Sendable, Codable {
     public var defaultSelected: Bool {
         switch self {
         case .appCache, .devTools, .browser: return true
-        case .aiTools, .communication, .other, .trash: return false
+        case .aiTools, .communication, .deepScan, .other, .trash: return false
         }
     }
 }
