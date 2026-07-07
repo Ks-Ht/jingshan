@@ -1,7 +1,7 @@
 # HANDOFF
 
 ## 已完成什么
-净山（Jingshan）v0.7 是一个**可用的产品**：一款 Swift 原生、非沙盒的 macOS 清理与系统监控 App，已构建 Release 版本并安装到 `/Applications/净山.app`，用户机器上正在运行验证。功能：垃圾/缓存清理（分组展示）、Docker 专项清理（宿主数据 + 运行时资源 + 未使用网络，Docker 停止时也能用）、项目构建产物清理（Purge，覆盖 Node/Rust/Java/Scala/Swift/Python/Go/Gradle/CocoaPods/Turborepo/Nuxt/Angular 等生态）、应用卸载器（Uninstaller，应用本体+残留文件含登录启动项，风险分级）、系统状态监控（Bento 仪表盘，含健康分/CPU/内存/磁盘/网络/电池 60 秒趋势图）、设置页（受保护路径 + 预览模式 + 构建产物扫描目录）。全局视觉已重做成"水墨山水"设计系统——每个模块一个水墨意象+原创诗句、统一 Hero 页头模板、修复了真机反馈的 RingGauge 裁切 bug、补齐了 VoiceOver/Reduce Motion/Dynamic Type 支持。项目已开源在 `https://github.com/Ks-Ht/jingshan`，支持 Homebrew Cask 一步安装。146 个单元测试全部通过。
+净山（Jingshan）v0.8 是一个**可用的产品**：一款 Swift 原生、非沙盒的 macOS 清理与系统监控 App，已构建 Release 版本并安装到 `/Applications/净山.app`，用户机器上正在运行验证。**v0.8.0 已发布上线**（GitHub Release + Homebrew Cask，实测 `brew upgrade --cask` 从 0.7.0 升到 0.8.0 全链路通过）。**仓库已从 `Ks-Ht/jingshan` 迁移到 `https://github.com/kongshan-0924/jingshan`**（旧地址 GitHub 自动重定向；tap 名现在是 `kongshan-0924/jingshan`）。功能：垃圾/缓存清理（分组展示）、Docker 专项清理（宿主数据 + 运行时资源 + 未使用网络，Docker 停止时也能用）、项目构建产物清理（Purge，覆盖 Node/Rust/Java/Scala/Swift/Python/Go/Gradle/CocoaPods/Turborepo/Nuxt/Angular 等生态）、应用卸载器（Uninstaller，应用本体+残留文件含登录启动项，风险分级）、系统状态监控（Bento 仪表盘，含健康分/CPU/内存/磁盘/网络/电池 60 秒趋势图）、设置页（受保护路径 + 预览模式 + 构建产物扫描目录）。全局视觉已重做成"水墨山水"设计系统——每个模块一个水墨意象+原创诗句、统一 Hero 页头模板、修复了真机反馈的 RingGauge 裁切 bug、补齐了 VoiceOver/Reduce Motion/Dynamic Type 支持。项目已开源在 `https://github.com/Ks-Ht/jingshan`，支持 Homebrew Cask 一步安装。146 个单元测试全部通过。
 
 按里程碑：
 1. 调研阶段：阅读 https://github.com/tw93/mole 源码，梳理架构要点（见下）。
@@ -176,7 +176,7 @@ cd .. && xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration 
 ## 当前状态
 App 已构建、已安装、已验证可启动无崩溃。M19 完成 GitHub 开源 + Homebrew Cask 分发；M20 整体视觉重构成"水墨山水"设计系统 + 修复 RingGauge 裁切 bug + Status Bento 化 + 无障碍补齐；M21 换成顶部标签导航 + 新增首页 + 修面积图溢出；M22 修 Docker 稀疏文件误报/0 值文案/首页误删暗示；**M23 完整做完了 P0（构建产物扫描修复：目录选择器 + 实时进度 + 四态流程）、P1（水墨精细化：单条山形剪影 hero + 彻底去系统蓝）、P2（排版对齐：首页磁贴等高+概览三列、状态页副标题不换行+Bento 底对齐、卸载搜索框移入内容区、顶部"…"改真菜单），全部离屏渲染逐条确认，Release 已装到 `/Applications/净山.app`**。项目公开在 `https://github.com/Ks-Ht/jingshan`。
 
-**只有用户能在真机确认的部分**（离屏渲染看不到，因为 `ImageRenderer` 不渲染 `Menu`/`Picker`/`TextField` 这类交互控件，也没有真实窗口 chrome）：①`NSOpenPanel` 选目录的完整交互流程；②在真实项目目录上扫描时的实时进度反馈（"正在扫描 X · 已发现 N 项"是否真的跳动、不再"闪一下没反应"）；③卸载页新搜索框（`TextField`）、排序 `Picker`、顶部"…"`Menu` 在真实窗口里的渲染与交互（离屏渲染里它们都显示成黄色占位图标，是渲染器限制，不是坏图标——这些控件本就在真机正常工作）；④卸载列表自定义选中态（accent 竖条+软底）的 hover/键盘观感；⑤真实窗口 chrome（交通灯避让、毛玻璃、切标签动画）。**界面点击走查依然做不到**（缺 Accessibility/Screen Recording 权限）。改动尚未提交（等用户最终确认）。
+**只有用户能在真机确认的部分**（离屏渲染看不到，因为 `ImageRenderer` 不渲染 `Menu`/`Picker`/`TextField` 这类交互控件，也没有真实窗口 chrome）：①`NSOpenPanel` 选目录的完整交互流程；②在真实项目目录上扫描时的实时进度反馈（"正在扫描 X · 已发现 N 项"是否真的跳动、不再"闪一下没反应"）；③卸载页新搜索框（`TextField`）、排序 `Picker`、顶部"…"`Menu` 在真实窗口里的渲染与交互（离屏渲染里它们都显示成黄色占位图标，是渲染器限制，不是坏图标——这些控件本就在真机正常工作）；④卸载列表自定义选中态（accent 竖条+软底）的 hover/键盘观感；⑤真实窗口 chrome（交通灯避让、毛玻璃、切标签动画）。**界面点击走查依然做不到**（缺 Accessibility/Screen Recording 权限）。**M20–M23 全部改动已提交（`feat:` 大提交 + `chore:` 仓库地址更新两个 commit）并推送 main，v0.8.0 已发布**，`brew upgrade --cask kongshan-0924/jingshan/jingshan` 实测通过。
 
 ## M20 安全审计发现（已全部处理）
 这一轮改动几乎全是视觉层重构，但四个删除流程的确认弹窗全部换了实现（迁移到共享的 `ConfirmSheetShell`），"换皮时不小心削弱了风险确认门槛"是比"引入新删除漏洞"更现实的风险，因此专门做了一轮聚焦审计，而不是走完整的通用安全审计流程（因为大部分改动根本不涉及删除逻辑本身）。
@@ -259,7 +259,8 @@ App 已构建、已安装、已验证可启动无崩溃。M19 完成 GitHub 开�
 
 ## 下一步该做什么（如果继续迭代）
 0. **（M19）如果要发新版本**：改 `project.yml` 的 `MARKETING_VERSION` → Release 构建 → `ditto -c -k --sequesterRsrc --keepParent 净山.app Jingshan-<version>.zip` → `shasum -a 256` 算新摘要 → `gh release create v<version> <zip>` → 更新 `Casks/jingshan.rb` 的 `version`/`sha256`（`url` 会随 `#{version}` 插值自动跟着变，不用手改）→ commit+push → 本地 `brew untap`/`brew tap` 刷新缓存后 `brew upgrade --cask jingshan` 冒烟验证一遍。
-1. **用户自己走查界面，看 M23 P0/P1/P2 的实际效果**：构建产物扫描是否有进度反馈了、hero 山形剪影是否干净、按钮/搜索框有没有系统蓝残留、卸载列表选中态、首页磁贴等高与系统概览三列、状态页副标题单行+Bento 底对齐、顶部"…"菜单展开是否正常。以及 M20 遗留的深色模式配色（估的第一版，尤其值得反馈）。**改动尚未提交**，用户确认满意后再 commit（提交流程见下方"下一位 Agent 如何接手"）。
+1. **用户自己走查界面，看 M23 P0/P1/P2 的实际效果**：构建产物扫描是否有进度反馈了、hero 山形剪影是否干净、按钮/搜索框有没有系统蓝残留、卸载列表选中态、首页磁贴等高与系统概览三列、状态页副标题单行+Bento 底对齐、顶部"…"菜单展开是否正常。以及 M20 遗留的深色模式配色（估的第一版，尤其值得反馈）。发现问题就继续开新里程碑修（下一个版本发 0.8.1/0.9.0）。
+0b. **仓库地址已变**：以后所有 `gh`/`git push`/发版都对 `kongshan-0924/jingshan`；发新版流程见下方"下一步该做什么"第 0 条，注意 tap 名、Cask `url`/`homepage`、README 都已经是新地址，别再写回 `Ks-Ht`。
 2. （M20 新增）如果用户想要 GPU/温度/风扇监控，需要重新评估走 `IOAccelerator`/SMC 私有 API 的可靠性风险，建议单独开一个明确标注"实验性"的里程碑，不要假设这是顺手加卡片的工作量（见风险清单第 15 条）。
 3. （M20 新增）菜单栏 MenuBarExtra HUD——文档里明确标注的"加分项"，这次故意跳过，架构上仍然预留（`JingshanApp.swift` 可以直接加一个 `MenuBarExtra` scene）。
 4. Uninstaller 可扩展方向：`~/Library/Group Containers`（v1 故意跳过，group id 与 bundle id 不是简单对应关系，匹配可靠性不够）；如果用户确实要卸载 Parallels/UTM/VMware 等其他虚拟化工具，需要重新评估是否要为它们也加类似 Docker 的针对性存活检测（见风险清单第 10 条）。

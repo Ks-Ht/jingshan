@@ -197,3 +197,12 @@
 - **P2.5 卸载页搜索框**：删掉 `.searchable`（macOS 把它浮到窗口标题栏、压在顶部标签导航上），改成 `appListColumn` 头部下方的自定义 `searchField`（放大镜 + `TextField(.plain)` + 有输入时的清除按钮，`Color.primary.opacity(0.05)` 圆角底 + hairline 描边，靠 body 层 `.tint(uninstallerAccent)` 去系统蓝）。离屏渲染确认搜索框在内容区（`TextField`/`Picker` 显示成黄色占位是 `ImageRenderer` 不渲染交互控件的限制，真机正常）。
 - **P2.6 顶部导航**：`TopNavBar` 的 "…" 从"看着像菜单其实只是开设置的 `SettingsLink`"改成真正的 `Menu`（`SettingsLink{设置…}` + 关于净山`orderFrontStandardAboutPanel` + 检查更新…`NSWorkspace.open(releases)`），`.menuStyle(.borderlessButton).menuIndicator(.hidden)`；外层 `HStack` spacing 16→12（logo↔标签 8–12px）。加 `import AppKit`。Docker hero 环形本就在山形剪影下方独占一行（P1 已满足），未改。
 - **验证**：`swift test` 146/146（P2 零改动 `JingshanCore`）；Debug/Release 构建通过；`nm` 确认 Release `SnapshotHarness` 零符号；离屏渲染逐条核对（home.png 三列网格+等高磁贴、status.png 健康度副标题单行+两行卡片底对齐、uninstaller.png 搜索框在内容区、topnav.png logo 间距收紧）；重装 `/Applications/净山.app`（v0.7.0）冒烟无 crash。**改动仍未提交**（等用户最终确认）。
+
+## 续二十（提交 M20–M23 + 发布 v0.8.0）
+用户回复"提交代码吧并且发布版本"，走 M19 记录的发布流程：
+- **版本号** `project.yml` 0.7.0→0.8.0（`CURRENT_PROJECT_VERSION` 1→2），`xcodegen generate` 重生成工程，Release 构建（`SnapshotHarness` 仍零符号）。
+- **提交**：M20–M23 全部改动（66 文件、+2930/−1175）一个 `feat:` 提交（含版本号），推送 main。
+- **⚠️ 仓库已迁移**：push 时 GitHub 提示仓库从 `Ks-Ht/jingshan` 迁到 **`kongshan-0924/jingshan`**（旧地址会重定向）。`gh` 已解析到新地址。相应把 Cask 的 `url`/`homepage`、README 的 `brew tap`/`git clone`、应用内"检查更新"链接、git remote 全部改到 `kongshan-0924`，单独一个 `chore:` 提交推送。**后续发版都用新地址**；tap 名现在是 `kongshan-0924/jingshan`。
+- **打包+发布**：`ditto -c -k --sequesterRsrc --keepParent` 打成 `Jingshan-0.8.0.zip`（1.1 MB），`shasum -a 256` = `bbda0940...a99262`，`gh release create v0.8.0`（发到 kongshan-0924，带中文 release notes）。更新 `Casks/jingshan.rb` 的 `version`/`sha256`。
+- **端到端验证**：`curl -L` 确认 release 资源可下载（HTTP 200、1120342 字节）且下载物 sha256 与 Cask 完全一致；`brew tap kongshan-0924/jingshan` + `brew info` 读到 0.8.0、`brew audit` 无报错；`brew upgrade --cask` 实测从 0.7.0 升到 0.8.0（下载→校验 sha→装到 `/Applications`→postflight `xattr -cr` 清掉 quarantine），装完 `/Applications/净山.app` 是 0.8.0、无 quarantine、`open` 冒烟运行无 crash。**本轮改动已全部提交并推送，v0.8.0 已发布上线。**
+- 发布页：https://github.com/kongshan-0924/jingshan/releases/tag/v0.8.0
