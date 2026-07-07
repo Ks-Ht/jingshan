@@ -5,7 +5,7 @@ cask "jingshan" do
   url "https://github.com/Ks-Ht/jingshan/releases/download/v#{version}/Jingshan-#{version}.zip"
   name "净山"
   name "Jingshan"
-  desc "Swift 原生 macOS 清理与系统监控工具"
+  desc "清理与系统监控工具"
   homepage "https://github.com/Ks-Ht/jingshan"
 
   depends_on macos: :sonoma
