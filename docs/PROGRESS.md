@@ -4,7 +4,7 @@
 参考 https://github.com/tw93/mole（Mole）的架构思路（尤其是安全清理设计），为用户开发一款 Swift 原生 Mac 清理/监控 App，命名为「净山」(Jingshan)。
 
 ## 当前阶段
-**v0.7 可用产品已交付**：M1-M6 完成；M7 新增 Docker 专项清理（含安全审计，修复 9 项）；M8 大幅增强 Docker（宿主侧数据扫描，Docker 停止时也能清；未使用镜像清理；VM 磁盘回收）；M9 补齐原计划的设置页（受保护路径管理 + 预览模式）；M10 再次全面安全审计（数据安全第一，修复 3 项，含一个真实的删除时序竞态）；M11 新增项目构建产物清理 Purge；M12 新增应用卸载器 Uninstaller（含安全审计，修复 1 个 High 级跨模块风险）；M13 全局视觉一致性优化；M14 应用户要求做了更大胆的创意布局（路径式侧边栏、弧形仪表盘、状态页动态非对称布局），过程中首次用本地预览服务器真正渲染验证了设计 mockup；M15 修复"0 值与缺失数据混淆"问题；M16 校正系统状态监控口径（内存/网络，均用真机数据核实过偏差）；M17 深度扩展四个清理模块的扫描范围同时收紧默认勾选；M18 全面安全审计+全功能测试，首次用真实但完全隔离的 Docker 容器/镜像/卷/网络验证 Docker 模块（而非只用 Fake），全程不影响真机已有数据。App 已安装在 `/Applications/净山.app` 并验证可正常运行，145 个单元测试全部通过。
+**v0.7 可用产品已交付，且已公开发布**：M1-M6 完成；M7 新增 Docker 专项清理（含安全审计，修复 9 项）；M8 大幅增强 Docker（宿主侧数据扫描，Docker 停止时也能清；未使用镜像清理；VM 磁盘回收）；M9 补齐原计划的设置页（受保护路径管理 + 预览模式）；M10 再次全面安全审计（数据安全第一，修复 3 项，含一个真实的删除时序竞态）；M11 新增项目构建产物清理 Purge；M12 新增应用卸载器 Uninstaller（含安全审计，修复 1 个 High 级跨模块风险）；M13 全局视觉一致性优化；M14 应用户要求做了更大胆的创意布局（路径式侧边栏、弧形仪表盘、状态页动态非对称布局），过程中首次用本地预览服务器真正渲染验证了设计 mockup；M15 修复"0 值与缺失数据混淆"问题；M16 校正系统状态监控口径（内存/网络，均用真机数据核实过偏差）；M17 深度扩展四个清理模块的扫描范围同时收紧默认勾选；M18 全面安全审计+全功能测试，首次用真实但完全隔离的 Docker 容器/镜像/卷/网络验证 Docker 模块（而非只用 Fake），全程不影响真机已有数据；M19 应用户要求"输出成能用 homebrew 安装的形式"，开源到 `https://github.com/Ks-Ht/jingshan`（公开仓库）、发布 `v0.7.0` GitHub Release、写了内嵌式 Homebrew Cask 并实测验证了完整安装流程（含修正一处最初写错的 `--no-quarantine` 参数、改用 `postflight` 自动处理 Gatekeeper quarantine）。App 已安装在 `/Applications/净山.app` 并验证可正常运行，也可以通过 `brew install --cask` 安装，145 个单元测试全部通过。
 
 ## 已完成
 - 调研 tw93/mole 架构，确认关键决策：Swift 原生 App、GUI、MVP=垃圾清理+状态监控、名称=净山、仅 macOS。
@@ -28,10 +28,11 @@
 - **M16（系统监控口径校正）**：真机 `vm_stat`/`netstat` 核实后，内存"已用"公式改为 active+wired+compressed（原公式在这台机器上偏差约 3.5GB/22%）；网络吞吐排除常见虚拟/隧道网卡（真机当时有一个 VPN 隧道在跑，实测证实了旧逻辑会叠加统计）。
 - **M17（深度扫描+收紧默认勾选）**：Clean 新增 5 个开发工具缓存位置；Docker 新增"未使用自定义网络"清理；Purge 新增 6 条语言生态规则（Go/Python tox/Turborepo/Nuxt/Angular/sbt）；Uninstaller 新增登录启动项残留扫描。同时把 Clean 的分类默认勾选、Uninstaller 的残留档位默认勾选都收紧为"只有最常用最安全的默认选中"。
 - **M18（全面安全审计+全功能测试，数据安全第一）**：按用户"想办法用容器或沙箱等虚拟数据测试"的明确要求，用真实但完全隔离的 `jingshan-selftest-*` 前缀 Docker 资源验证了 Docker 模块的真实 CLI 行为，全程确认不影响真机已有的业务镜像，验证完全部清理并把 Docker 恢复到测试前的停止状态。独立审计对 M14-M17 做了复核，发现 1 项风险评级不一致（Docker 网络清理，已降级为 caution+默认不勾选）+ 补齐了新 Purge 规则的端到端测试，其余复查项目（LaunchAgents 前缀匹配、pip 去重、默认勾选一致性、扫描状态时序、内存公式溢出）均确认无实质缺陷。
+- **M19（GitHub 开源 + Homebrew Cask 分发，用户要求"能不能把这个项目输出成能用 homebrew 安装的形式"）**：`project.yml` 版本号从 `0.1.0` 提到 `0.7.0`（对齐实际功能水平）；写了 README.md（功能介绍/安装方式/开发指引/数据安全说明）；`gh repo create` 新建公开仓库并推送全部代码到 `https://github.com/Ks-Ht/jingshan`；`ditto` 打包 Release 构建产物、`gh release create v0.7.0` 发布；写了内嵌在主仓库的 `Casks/jingshan.rb`（不建独立 `homebrew-jingshan` 仓库，用显式 URL 挂载 tap）。实测走完整安装流程（`brew tap` → `brew install --cask`）时发现文档最初写的 `--no-quarantine` 参数在这台机器的 Homebrew 版本里根本不存在，改为给 Cask 加 `postflight` 块自动清除 quarantine 属性，重新验证后确认普通用户一步安装即可直接打开 App，无需任何手动步骤。
 - 全程 145 个单元测试，全部通过；每个里程碑后都做了构建+启动冒烟验证。
 
 ## 尚未开始 / 明确排除在当前范围外
-- 正式 Developer ID 签名 + 公证 + DMG 分发（需要用户自己的 Apple Developer Program 账号）。
+- 正式 Developer ID 签名 + 公证 + DMG 分发（需要用户自己的 Apple Developer Program 账号；M19 已确认用户当前接受 ad-hoc 签名的 Gatekeeper friction，暂不追求这一步）。
 - 磁盘空间分析（`mo analyze`）、系统优化维护（`mo optimize`）、安装包清理（`mo installer`）。
 - 更大的视觉/体验改动（M13/M14 都故意没做）：换图标、Status 历史曲线图、菜单栏 MenuBarExtra。
 - 真实的界面点击走查（受限于当前会话缺少 Accessibility/Screen Recording 权限，只做了代码走查+编译+单元测试+启动冒烟测试；M14 的设计方向例外地用 HTML mockup 预览验证过）。

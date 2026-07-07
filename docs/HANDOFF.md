@@ -26,6 +26,7 @@
 20. **M16（系统状态检测准确性）**：真机 `vm_stat`/`netstat` 核实后修正——内存"已用"公式改为 Activity Monitor 口径的 active+wired+compressed（此前的"总量-free_count"在这台机器上偏差约 3.5GB/22%）；网络吞吐排除 utun/awdl/llw/bridge 等虚拟/隧道网卡（真机当时有一个 VPN 隧道在跑，实测证实旧逻辑会把隧道流量和物理网卡叠加导致读数虚高）。
 21. **M17（深度扫描 + 收紧默认勾选）**：Clean 新增 iOS 设备支持文件/模拟器缓存/pip/Cargo/Gradle 位置，`CacheGroup` 默认勾选收紧到只有 App缓存/开发工具/浏览器 三组；Docker 新增"未使用自定义网络"清理；Purge 新增 Go/Python tox/Turborepo/Nuxt/Angular/sbt 共 6 条新规则；Uninstaller 的 `ResidualRiskTier.isDefaultSelectable` 收紧为只有 safe 档默认勾选，并新增登录启动项（LaunchAgents）残留扫描。
 22. **M18（安全审计 + 全功能测试，数据安全第一）**：用真实但完全隔离的 `jingshan-selftest-*` 前缀 Docker 容器/镜像/卷/网络验证了 Docker 模块的真实 CLI 行为（不只是 Fake 测试），全程验证不影响真机既有的业务镜像；独立审计对 M14-M17 做了复核，发现 1 项需要处理的评级不一致（Docker 网络清理，已降级处理）+ 补齐了新 Purge 规则的端到端测试，其余复查项目均确认无实质缺陷。详见下方"M18 安全审计发现"与"Docker 模块设计要点"补充说明。
+23. **M19（用户要求"能不能把这个项目输出成能用 homebrew 安装的形式"）**：`MARKETING_VERSION` 从 `0.1.0` 提到 `0.7.0`（对齐已交付的实际功能水平）；写了 README.md；用 `gh repo create` 新建了公开仓库 `https://github.com/Ks-Ht/jingshan` 并推送全部代码；`ditto -c -k --sequesterRsrc --keepParent` 打包 Release 构建产物成 `Jingshan-0.7.0.zip`，`gh release create v0.7.0` 发布；写了 `Casks/jingshan.rb`（内嵌在主仓库里的 Cask，不是独立的 `homebrew-jingshan` 仓库，通过 `brew tap ks-ht/jingshan https://github.com/Ks-Ht/jingshan` 这种显式 URL 形式挂载）。实测走完整安装流程时发现两处问题并修正：`brew install --cask --no-quarantine` 报错——这台机器的 Homebrew 版本（6.0.8）根本没有 `--no-quarantine` 这个参数（`brew install --cask --help` 核实过），README 和 Cask 最初都写错了；改为给 Cask 加 `postflight` 块，安装后自动对 `净山.app` 跑 `xattr -cr`，实测确认这样普通用户 `brew install --cask jingshan` 全程不需要任何手动步骤就能正常打开 App。详见下方"M19 Homebrew 分发设计要点"。
 
 **当前完整功能**：缓存/日志/浏览器缓存/开发工具缓存（含 iOS 设备支持/模拟器/pip/Cargo/Gradle）/废纸篓清理（分组展示→勾选→确认→Trash/永久删除→日志，默认只勾选 App缓存/开发工具/浏览器三组）、Docker 专项清理（宿主 VM 磁盘/日志/缓存 + 运行时容器/镜像/构建缓存/数据卷/未使用网络，Docker 停止时也能清宿主数据）、项目构建产物清理（覆盖 Node/Rust/Java/Scala/Swift/Python/Go/Gradle/CocoaPods/Turborepo/Nuxt/Angular，标志文件门禁防误判）、应用卸载器（应用本体+多处残留文件含登录启动项，风险分级+确认门槛，只有安全档默认勾选）、实时 CPU/内存/磁盘/网络监控（口径已按真机数据校正）、设置页（受保护路径 + 预览模式 + 构建产物扫描目录）。磁盘分析、系统优化仍不在范围内（后续迭代）。
 
@@ -115,6 +116,16 @@ cleanmac/
 - **状态页"最紧急指标自动放大"是动态计算的，不是固定顺序**：`StatusView.heroMetric` 每次都从当前 CPU/内存/磁盘的实时使用率里取最大值决定谁是主卡片，不存在"CPU 永远最大"这种硬编码假设；只有当选中的主指标本身进入警戒色（非绿色）时才会显示"需要关注"的警示标签，避免每次打开都在吓唬用户。
 - **侧边栏放弃了 `List(selection:)`，改用自定义 Button 列表**：为了画虚线小径背景连接图标徽标，牺牲了 SwiftUI 原生 List 的某些内置行为，但每一行仍然是真正的 `Button`（保留 Tab/Space/Return 键盘可达性），不是纯手绘的不可交互视图。
 
+## M19 Homebrew 分发设计要点（务必读懂再改）
+- **Cask 而非 Formula**：`brew create` 生态里 GUI macOS App 对应 Cask（管理 `.app` 安装到 `/Applications`），Formula 是给命令行工具/库用的，两者不可混用。
+- **内嵌 Cask，不是独立 tap 仓库**：标准做法通常是新建一个专门叫 `homebrew-<name>` 的仓库；这里图省事直接把 `Casks/jingshan.rb` 放进主仓库根目录，用 `brew tap ks-ht/jingshan https://github.com/Ks-Ht/jingshan`（显式给出 URL）挂载，绕开了"tap 名必须匹配仓库名"的默认约定。以后如果 Cask 数量变多或想让别人也能方便地 `brew tap ks-ht/jingshan`（不用手动写 URL），再考虑拆成独立仓库。
+- **ad-hoc 签名 + 未公证是已知且用户接受的权衡**：询问过用户"要不要先申请 Developer ID 签名+公证再发布"，用户选择"能接受，反正是我自己用"，明确不追求这一步。这意味着 Gatekeeper 天然会拦截首次启动——`spctl -a -vvvv --type execute` 对这个 App 的判定是 **`rejected`**（真机实测确认，签名信息显示 `flags=0x2(adhoc)`、`TeamIdentifier=not set`），这是 ad-hoc 签名的必然结果，不是 bug。
+- **`--no-quarantine` 不是真实存在的 brew 参数（这台机器上，6.0.8 版本）**：最初 README/Cask 都写了"`brew install --cask --no-quarantine`"，实测直接报 `Error: invalid option: --no-quarantine`，`brew install --cask --help` 核实过这台机器安装的版本压根没有这个 flag。**已修正**：改为 Cask 里加 `postflight do system_command "/usr/bin/xattr", args: ["-cr", "#{appdir}/净山.app"] end`，让安装脚本自动清除 quarantine 属性，不需要用户知道任何 brew 参数或手动执行 xattr。这是重新 tap+reinstall 实测验证过的：安装后 `xattr -l` 只剩下无害的 `com.apple.provenance`，没有 `com.apple.quarantine`，`open` 直接可以启动、`log show` 无 error/fault。
+- **`spctl -a` 的"rejected"判定和"用户实际能不能双击打开"是两件不完全一样的事，别混淆**：`spctl -a --type execute` 是"这份代码签名本身是否满足 Gatekeeper 公证策略"的独立判定，跟文件有没有 `com.apple.quarantine` 属性无关——即使执行了 `xattr -cr`，重新 `spctl -a` 还是会显示 `rejected`（真机验证过，两种状态下判定都是 rejected）。但决定"Finder 双击时是否弹出拦截对话框"的实际机制是**quarantine 属性本身触发的 LaunchServices 首次启动检查**，一旦这个属性不存在（无论是 `postflight` 自动清掉，还是用户手动 `xattr -cr`），正常 GUI 双击就不会触发那个检查、不会弹拦截对话框，即使 `spctl -a` 单独问起来仍然会说 rejected。caveats 文案措辞上避免了直接断言"清除 quarantine 后 spctl 会说 accepted"这种不准确的说法，只承诺"可以直接双击打开"这个真正对用户有意义的结果。
+- **验证方法论上的一个教训**：曾经用这个工具环境里的 `open` 命令（通过自动化 Bash 工具触发，不是真正的 Finder 双击）测试过"quarantine 属性还在的情况下能不能打开"，结果**看起来**启动成功了（有真实 PID）——但这很可能是这个自动化 shell 环境本身缺少完整的交互式 Aqua/WindowServer 会话，导致 Gatekeeper 拦截对话框那一层没有被真正触发，而不是说明 ad-hoc 签名真的能绕过 Gatekeeper。**没有采信这个误导性的初步结果**，而是用更权威的 `spctl -a`（明确说 rejected）和该场景下已被广泛验证的社区共识（quarantine 属性触发首次启动检查，是 Homebrew Cask 生态处理这类未公证 App 的标准套路）来定最终的文档措辞，没有为了图省事而把一次不可靠的自动化测试结果写进面向用户的文档。
+- **Release 产物打包用 `ditto` 不是 `zip`**：`ditto -c -k --sequesterRsrc --keepParent 净山.app Jingshan-0.7.0.zip`——Apple 官方推荐的 App bundle 打包方式，比通用 `zip` 命令更能正确保留扩展属性/资源分支，避免解压后签名信息损坏。
+- **`sha256`/`url`/`version` 三者要保持同步**：Cask 里 `version "0.7.0"` 驱动 `url` 里的 `#{version}` 插值，指向 GitHub Release 的具体 tag（`v#{version}`）和文件名（`Jingshan-#{version}.zip`）；`sha256` 是发布的 zip 文件的实际摘要（`shasum -a 256`），版本号更新时必须同步重算并更新这个值，否则 `brew install` 会因为校验和不匹配直接拒绝安装（这是 Homebrew 内建的完整性保护，不需要额外自己写校验逻辑）。
+
 ## 测试结果
 ```
 cd JingshanCore && swift test
@@ -129,7 +140,7 @@ cd .. && xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration 
 **环境要求**：`xcode-select` 已切换到 `/Applications/Xcode.app/Contents/Developer`，`swift build`/`swift test`/`xcodebuild` 均可直接使用，无需 `DEVELOPER_DIR=` 前缀。`xcodegen`（2.45.4）已通过 Homebrew 安装，工程改动后需 `xcodegen generate` 重新生成 `.xcodeproj`（已 gitignore，不进仓库，`project.yml` 才是真源）。
 
 ## 当前状态
-App 已构建、已安装、已验证可启动无崩溃，六大功能（清理、Docker 清理、构建产物清理、应用卸载、状态监控、设置）均已实现并接入真实系统 API/文件系统/Docker CLI，做过两轮视觉/排版优化（M13 一致性配色 + M14 创意布局），并做过一轮"深度扫描+收紧默认勾选+系统监控口径校正"的功能完善（M15-M17），最后完成了一轮结合真机 Docker 容器验证的全面安全审计（M18）。**界面点击走查依然没做过**（缺 Accessibility/Screen Recording 权限，`screencapture` 本轮再次实测确认仍不可用），建议用户自己打开 `/Applications/净山.app` 走一遍：清理页扫描→勾选→清理→查看结果（这次分类默认勾选范围收紧了，AI 工具/其他两组不再默认选中，需要的话手动勾）；状态页看实时数据（内存口径这次校正过，数字应该比之前更接近 Activity Monitor；三张卡片里用量最高的会自动变成大卡片）；Docker 页（这台机器 Docker 已恢复停止状态，正好可以验证"宿主磁盘数据"板块，新增的"未使用自定义网络"清理项在运行时资源里，默认不勾选）；构建产物页（新增了 Go/Python/Turborepo/Nuxt/Angular 等生态识别）；卸载应用页（残留文件默认勾选范围也收紧了，只有缓存类默认选中；新增登录启动项扫描，建议先挑一个不重要的小工具类应用试一遍完整流程）；⌘, 打开设置页试预览模式、受保护路径、构建产物扫描目录。
+App 已构建、已安装、已验证可启动无崩溃，六大功能（清理、Docker 清理、构建产物清理、应用卸载、状态监控、设置）均已实现并接入真实系统 API/文件系统/Docker CLI，做过两轮视觉/排版优化（M13 一致性配色 + M14 创意布局），并做过一轮"深度扫描+收紧默认勾选+系统监控口径校正"的功能完善（M15-M17），完成了一轮结合真机 Docker 容器验证的全面安全审计（M18），最后完成了 GitHub 开源 + Homebrew Cask 分发（M19）——项目现在公开在 `https://github.com/Ks-Ht/jingshan`，标签 `v0.7.0` 已发布 Release，任何人（包括用户自己换新机器）都可以用 `brew tap ks-ht/jingshan https://github.com/Ks-Ht/jingshan && brew install --cask jingshan` 一步装好，postflight 自动处理 quarantine，不需要额外手动步骤。**界面点击走查依然没做过**（缺 Accessibility/Screen Recording 权限，`screencapture` 本轮再次实测确认仍不可用），建议用户自己打开 `/Applications/净山.app` 走一遍：清理页扫描→勾选→清理→查看结果（这次分类默认勾选范围收紧了，AI 工具/其他两组不再默认选中，需要的话手动勾）；状态页看实时数据（内存口径这次校正过，数字应该比之前更接近 Activity Monitor；三张卡片里用量最高的会自动变成大卡片）；Docker 页（这台机器 Docker 已恢复停止状态，正好可以验证"宿主磁盘数据"板块，新增的"未使用自定义网络"清理项在运行时资源里，默认不勾选）；构建产物页（新增了 Go/Python/Turborepo/Nuxt/Angular 等生态识别）；卸载应用页（残留文件默认勾选范围也收紧了，只有缓存类默认选中；新增登录启动项扫描，建议先挑一个不重要的小工具类应用试一遍完整流程）；⌘, 打开设置页试预览模式、受保护路径、构建产物扫描目录。
 
 ## M18 安全审计发现（本轮，已全部处理）
 针对 M14-M17 的全部改动（创意布局落地、0 值显示修复、系统监控口径校正、深度扫描+收紧默认勾选）做了自查+独立 subagent 对抗性复核，并且首次按用户"想办法用容器或沙箱等虚拟数据测试"的明确要求，用真实但完全隔离的 Docker 资源验证了 Docker 模块（而不只是 Fake 测试）。
@@ -186,12 +197,15 @@ App 已构建、已安装、已验证可启动无崩溃，六大功能（清理�
 9. **图标是我用 Core Graphics 程序化画的**（三层水墨山峦剪影 + 新月），不是设计师作品，风格偏极简；如果用户不喜欢，`generate_icon.swift`（在会话 scratchpad，不在仓库里，需要的话我可以重新放到仓库某处再改）改几个坐标/颜色重新跑一遍即可。
 10. **卸载器的"沙盒容器数据"存活检测目前只覆盖 Docker 这一个已验证案例**：`UninstallerViewModel.performUninstall` 里只对 `com.docker.docker` 做了 `DockerAvailability` 二次校验（详见"Uninstaller 模块设计要点"）。如果以后用户安装了其他会在 `~/Library/Containers` 里存放大量真实数据的虚拟化/容器类工具（Parallels、UTM、VMware Fusion 等），卸载那些工具时，通用的 destructive 档位默认不勾选+确认弹窗二次勾选仍然生效（不会误删），但不会有针对该工具"是否仍在运行/是否有活动虚拟机"的专属存活检测——这是已知的、经过独立审计确认可接受的范围限制，不是遗漏。以后如果用户明确要卸载某个虚拟化工具，需要重新评估是否要加类似 Docker 的针对性检测。
 11. ~~Docker"未使用自定义网络"清理未在真机上验证过"停止容器是否仍保护网络"这个细节~~ **已在真机验证确认**（M17 新增，M18 审计后降级为 caution+默认不勾选；后续补验证证实了 `docker network prune` 确实不会因为存在非运行态容器引用而保护网络，caution+默认不勾选是正确评级，不需要再放宽）。详见"Docker 模块设计要点"最后一条 和 "M18 安全审计发现"。
+12. **ad-hoc 签名 + 未公证是长期存在、用户已知情接受的分发限制**（M19）：`spctl -a` 对这个 App 的判定固定是 `rejected`，Cask 的 `postflight` 只是自动清除 quarantine 属性从而让 Finder 双击不触发拦截对话框，并不能让签名本身变得"受信任"。如果以后要分享给用户之外的其他人，或者想要更顺滑的体验（没有任何 Gatekeeper 相关的疑虑），仍然需要走风险清单第 7 条说的 Developer ID + 公证流程——这是账号持有人（用户自己）才能决定要不要付费（$99/年）去做的事，协助开发的一方无法代劳。
+13. **`Casks/jingshan.rb` 里的 `sha256`/`version`/`url` 三者必须手动保持同步**：以后每次发新版本（改 `project.yml` 的 `MARKETING_VERSION` + 重新构建 + 打包 + 发 Release），必须同步更新 Cask 里这三个字段（尤其是 `sha256`，用 `shasum -a 256` 重新计算新 zip 的摘要），否则用户 `brew install`/`brew upgrade` 会因校验和不匹配直接失败。目前没有自动化这个流程（没有 CI/CD 脚本），是纯手动步骤，容易忘记。
 
 ## 已知限制
 - 我这边跑 Claude Code 的终端进程没有"屏幕录制"和"辅助功能"权限，所以从 M2 到 M14（创意布局落地）都无法对**原生 App 本身**截图或做 UI 自动化走查，每次都用 `screencapture` 实测确认过仍然不可用（"could not create image from display"），不是偷懒没试。只能靠：编译通过 + 单元测试 + 直接运行可执行文件观察崩溃/日志。**M14 在"设计方向确认"这一步有所突破**——通过本地起 HTTP 服务器预览 HTML mockup、真正截图检查过（详见"M14 创意布局设计要点"），但这只验证了设计方向，最终的 SwiftUI 实现本身仍然没有被截图验证过。**建议用户自己点开 App 走一遍完整流程**，如果发现界面问题告诉我，我可以针对性修。
 - CPU 的计算方式没有变过，是标准的 `host_processor_info` tick 差值法，比较可信。内存"已用"口径 M16 已从"总量-free_count"改成 Activity Monitor 口径的"active+wired+compressed"，用真机 `vm_stat` 核对过更准确，但仍是一种近似（不区分 App/Wired/Compressed 分别多少，只给一个合计"已用"）。网络吞吐 M16 已排除常见虚拟/隧道网卡（VPN/AirDrop/Thunderbolt Bridge 等），但仍是"所有物理网卡求和"，不是"识别默认路由网卡"，多网卡同时活动时（如 Wi-Fi+有线同时连接）仍会偏高；且如果用户真的用 Thunerbolt Bridge（`bridge0`）作为主力网络连接（罕见），会被误判为虚拟网卡而漏统计。
 
 ## 下一步该做什么（如果继续迭代）
+0. **（M19 新增）如果要发新版本**：改 `project.yml` 的 `MARKETING_VERSION` → Release 构建 → `ditto -c -k --sequesterRsrc --keepParent 净山.app Jingshan-<version>.zip` → `shasum -a 256` 算新摘要 → `gh release create v<version> <zip>` → 更新 `Casks/jingshan.rb` 的 `version`/`sha256`（`url` 会随 `#{version}` 插值自动跟着变，不用手改）→ commit+push → 本地 `brew untap`/`brew tap` 刷新缓存后 `brew upgrade --cask jingshan` 冒烟验证一遍。
 1. **用户自己走查一遍界面，重点看 M14 创意布局的实际效果**（路径式侧边栏、弧形仪表盘头部、状态页动态放大的主卡片）是否符合预期——SwiftUI 实现本身没有被截图验证过，需要用户的眼睛来确认。同时验证 M17 收紧的默认勾选范围（清理页/卸载应用页现在默认选中的项变少了）是否符合预期，以及 M16 校正后的内存/网络数字是否更准了。
 2. Docker 网络清理的风险评级需要真机验证补完（见风险清单第 11 条）。
 3. Uninstaller 可扩展方向：`~/Library/Group Containers`（v1 故意跳过，group id 与 bundle id 不是简单对应关系，匹配可靠性不够）；如果用户确实要卸载 Parallels/UTM/VMware 等其他虚拟化工具，需要重新评估是否要为它们也加类似 Docker 的针对性存活检测（见风险清单第 10 条）。
@@ -203,5 +217,6 @@ App 已构建、已安装、已验证可启动无崩溃，六大功能（清理�
 1. 先读本文件 + `docs/PROGRESS.md` + `docs/NEXT_STEPS.md`。
 2. `cd JingshanCore && swift test` 确认 145 个测试全绿。
 3. 改了 App/Features/Permissions 下的文件结构（加/删文件）后记得 `xcodegen generate` 重新生成工程，再 `xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Debug build` 验证。
-4. Release 构建 + 安装：`xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Release build`，产物在 `~/Library/Developer/Xcode/DerivedData/Jingshan-*/Build/Products/Release/净山.app`，`cp -R` 到 `/Applications/` 替换旧版本即可。
+4. Release 构建 + 安装：`xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Release build`，产物在 `~/Library/Developer/Xcode/DerivedData/Jingshan-*/Build/Products/Release/净山.app`，`cp -R` 到 `/Applications/` 替换旧版本即可（本机日常验证走这条路径，不必每次都过 Homebrew）。
 5. 如果要做界面相关改动，构建后至少用 `open /Applications/净山.app` 跑一下 + 检查 `log show --predicate 'process == "净山"'` 有没有 error/fault；如果拿到了 Screen Recording 权限，可以用 `screencapture` 截图辅助验证。
+6. **仓库已公开在 `https://github.com/Ks-Ht/jingshan`，且已有 Homebrew Cask（`Casks/jingshan.rb`）**——发新版本流程见上面"下一步该做什么"第 0 条；改动 `Casks/jingshan.rb` 后先本地 `brew style ks-ht/jingshan/jingshan`（不是直接对仓库里的文件路径跑，`brew style` 要求文件在已识别的 tap 里，要么先 push 再 `brew untap`/`brew tap` 刷新，要么直接改 `/opt/homebrew/Library/Taps/ks-ht/homebrew-jingshan/Casks/jingshan.rb` 里的本地副本测试语法后再同步改回仓库文件）确认没有 rubocop 报错。
