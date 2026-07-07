@@ -61,18 +61,44 @@ public struct NetworkSnapshot: Sendable, Equatable {
     public static let empty = NetworkSnapshot(downloadBytesPerSecond: 0, uploadBytesPerSecond: 0)
 }
 
+/// `isPresent` distinguishes "this Mac has no battery at all" (desktop
+/// Macs) from `SystemSnapshot.battery == nil` ("we haven't sampled yet") —
+/// two different kinds of absence that the UI needs to tell apart.
+public struct BatterySnapshot: Sendable, Equatable {
+    public let percentage: Int
+    public let isCharging: Bool
+    public let isPresent: Bool
+
+    public init(percentage: Int, isCharging: Bool, isPresent: Bool) {
+        self.percentage = percentage
+        self.isCharging = isCharging
+        self.isPresent = isPresent
+    }
+
+    public static let unavailable = BatterySnapshot(percentage: 0, isCharging: false, isPresent: false)
+}
+
 public struct SystemSnapshot: Sendable, Equatable {
     public let cpu: CPUSnapshot
     public let memory: MemorySnapshot
     public let disk: DiskSnapshot
     public let network: NetworkSnapshot
+    public let battery: BatterySnapshot?
     public let timestamp: Date
 
-    public init(cpu: CPUSnapshot, memory: MemorySnapshot, disk: DiskSnapshot, network: NetworkSnapshot, timestamp: Date) {
+    public init(
+        cpu: CPUSnapshot,
+        memory: MemorySnapshot,
+        disk: DiskSnapshot,
+        network: NetworkSnapshot,
+        battery: BatterySnapshot? = nil,
+        timestamp: Date
+    ) {
         self.cpu = cpu
         self.memory = memory
         self.disk = disk
         self.network = network
+        self.battery = battery
         self.timestamp = timestamp
     }
 
@@ -81,6 +107,7 @@ public struct SystemSnapshot: Sendable, Equatable {
         memory: .empty,
         disk: .empty,
         network: .empty,
+        battery: nil,
         timestamp: .distantPast
     )
 }

@@ -6,46 +6,24 @@ struct ResidualCandidateRow: View {
     let viewModel: UninstallerViewModel
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Toggle(
-                isOn: Binding(
-                    get: { viewModel.isResidualSelected(candidate) },
-                    set: { viewModel.setResidualSelected(candidate, $0) }
-                )
-            ) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(candidate.displayLabel)
-                            .fontWeight(.medium)
-                        if candidate.tier == .destructive {
-                            Text("高风险")
-                                .font(.caption2)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(RiskTint.destructive.opacity(0.15), in: Capsule())
-                                .foregroundStyle(RiskTint.destructive)
-                        }
-                    }
-                    Text(candidate.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Text(candidate.riskNote)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .toggleStyle(.checkbox)
+        CategoryRow(
+            title: candidate.displayLabel,
+            subtitle: candidate.path,
+            risk: candidate.tier.categoryRowRisk,
+            riskNote: candidate.riskNote,
+            sizeText: candidate.sizeBytes.map(ByteFormatter.string(fromBytes:)),
+            isSelected: viewModel.isResidualSelected(candidate),
+            onToggle: { viewModel.setResidualSelected(candidate, $0) }
+        )
+    }
+}
 
-            Spacer()
-
-            if let sizeBytes = candidate.sizeBytes {
-                Text(ByteFormatter.string(fromBytes: sizeBytes))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
+extension ResidualRiskTier {
+    var categoryRowRisk: CategoryRowRisk? {
+        switch self {
+        case .safe: return nil
+        case .caution: return .caution
+        case .destructive: return .destructive
         }
-        .padding(.vertical, 4)
     }
 }

@@ -10,6 +10,11 @@ final class PurgeViewModel {
     /// Distinguishes "never scanned" from "scanned and genuinely found
     /// nothing" — an empty `candidates` array means either.
     private(set) var hasScannedOnce = false
+    /// Live scan feedback: the directory currently being walked and the
+    /// running found-count, so the UI shows visible progress instead of
+    /// flashing.
+    private(set) var scanningPath: String?
+    private(set) var liveFoundCount = 0
     var selectedIDs: Set<String> = []
     var lastCleanupSummary: CleanupSummary?
 
@@ -37,26 +42,40 @@ final class PurgeViewModel {
         candidates = []
         selectedIDs = []
         lastCleanupSummary = nil
+        scanningPath = nil
+        liveFoundCount = 0
         isScanning = true
 
         let roots = scanRoots
+        // Strong capture of `self` is fine and intended: the VM is
+        // `@MainActor`-isolated (so Sendable), and the task self-releases on
+        // completion. The progress closure is `@Sendable`; it hops to the
+        // main actor to touch VM state.
         scanTask = Task {
             let scanner = PurgeScanner()
-            let found = await scanner.scan(roots: roots)
+            let found = await scanner.scan(roots: roots) { progress in
+                Task { @MainActor in
+                    guard self.isScanning else { return }
+                    self.scanningPath = progress.currentPath
+                    self.liveFoundCount = progress.foundCount
+                }
+            }
             guard !Task.isCancelled else { return }
-            candidates = found.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
+            self.candidates = found.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
             // Recently-touched projects default OFF: an actively worked-on
             // project's build artifacts are a less clear-cut win to nuke
             // right now (Mole's own "Recent" projects follow the same
             // unselected-by-default policy).
-            selectedIDs = Set(found.filter { !$0.isRecent }.map(\.id))
-            isScanning = false
-            hasScannedOnce = true
+            self.selectedIDs = Set(found.filter { !$0.isRecent }.map(\.id))
+            self.scanningPath = nil
+            self.isScanning = false
+            self.hasScannedOnce = true
         }
     }
 
     func cancelScan() {
         scanTask?.cancel()
+        scanningPath = nil
         isScanning = false
     }
 

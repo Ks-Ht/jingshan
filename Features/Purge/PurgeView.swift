@@ -1,35 +1,25 @@
+import AppKit
 import JingshanCore
 import SwiftUI
 
 struct PurgeView: View {
-    @State private var viewModel = PurgeViewModel()
+    let viewModel: PurgeViewModel
     @State private var showingConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            if viewModel.candidates.isEmpty {
-                ContentUnavailableView(
-                    viewModel.isScanning ? "正在扫描…" : "还没有扫描结果",
-                    systemImage: "archivebox",
-                    description: Text(
-                        viewModel.isScanning
-                            ? "首次扫描可能需要一些时间。"
-                            : "点击“开始扫描”查找项目里的构建产物（node_modules、target、.build 等）。扫描目录：\(viewModel.scanRoots.isEmpty ? "未配置，且默认目录不存在" : viewModel.scanRoots.joined(separator: "、"))"
-                    )
-                )
-            } else {
-                List(viewModel.candidates) { candidate in
-                    PurgeItemRow(candidate: candidate, viewModel: viewModel)
-                }
-            }
+            content
         }
+        .tint(InkPalette.purgeAccent)
         .navigationTitle("构建产物")
         .sheet(isPresented: $showingConfirmation) {
-            CleanConfirmationSheet(
-                selectedCount: viewModel.selectedCandidates.count,
-                totalBytes: viewModel.totalSelectedBytes,
+            ConfirmSheetShell(
+                title: "确认清理",
+                items: viewModel.selectedCandidates.map(PurgeConfirmItem.init),
+                totalSizeText: ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes),
+                extraAcknowledgment: { _ in EmptyView() },
                 onConfirm: { permanently in
                     showingConfirmation = false
                     Task { await viewModel.performCleanup(permanently: permanently) }
@@ -52,53 +42,142 @@ struct PurgeView: View {
         }
     }
 
+    // Four distinct states, each with its own copy — never a single ambiguous
+    // empty view (the old bug: an unconfigured scan flashed the same "no
+    // results" state as a completed empty scan).
+    @ViewBuilder
+    private var content: some View {
+        if viewModel.isScanning {
+            ScanningStateView(statusText: scanningStatusText)
+                .padding(24)
+        } else if !viewModel.hasScannedOnce {
+            if viewModel.scanRoots.isEmpty {
+                EmptyStateView(
+                    systemImage: "folder.badge.questionmark",
+                    title: "还没有设置扫描目录",
+                    message: "选择一个或多个项目目录，净山会在里面查找 node_modules、target、.build 等构建产物。",
+                    actionTitle: "选择目录",
+                    action: beginScan
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                EmptyStateView(
+                    systemImage: "archivebox",
+                    title: "还没有扫描结果",
+                    message: "将扫描：\(viewModel.scanRoots.map(abbreviate).joined(separator: "、"))",
+                    actionTitle: "开始扫描",
+                    action: beginScan
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else if viewModel.candidates.isEmpty {
+            EmptyStateView(
+                systemImage: "checkmark.circle",
+                title: "扫描完成，未发现构建产物",
+                message: "扫描目录：\(viewModel.scanRoots.map(abbreviate).joined(separator: "、"))。可在右上「目录…」或设置里调整。",
+                actionTitle: "重新扫描",
+                action: beginScan
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            List(viewModel.candidates) { candidate in
+                PurgeItemRow(candidate: candidate, viewModel: viewModel)
+            }
+        }
+    }
+
+    private var scanningStatusText: String {
+        let where_ = viewModel.scanningPath.map { "正在扫描 \(abbreviate($0))" } ?? "正在扫描…"
+        return "\(where_) · 已发现 \(viewModel.liveFoundCount) 项"
+    }
+
+    /// The single scan entry point shared by the hero button and the empty-
+    /// state button: if no scan roots are set yet, prompt for directories
+    /// first (never silently run an empty scan); otherwise scan.
+    private func beginScan() {
+        if viewModel.scanRoots.isEmpty {
+            pickDirectories(thenScan: true)
+        } else {
+            viewModel.startScan()
+        }
+    }
+
+    /// Non-sandboxed app with Full Disk Access, so a plain `NSOpenPanel`
+    /// selection is directly usable — no security-scoped bookmarks needed.
+    private func pickDirectories(thenScan: Bool) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = true
+        panel.prompt = "选择"
+        panel.message = "选择要扫描构建产物的项目目录（可多选）"
+        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
+        for url in panel.urls { AppSettings.shared.addPurgeScanPath(url.path) }
+        if thenScan { viewModel.startScan() }
+    }
+
+    private func abbreviate(_ path: String) -> String {
+        (path as NSString).abbreviatingWithTildeInPath
+    }
+
     @ViewBuilder
     private var header: some View {
         let reclaimable = viewModel.totalReclaimableBytes
         let selected = viewModel.totalSelectedBytes
         let fraction = reclaimable > 0 ? Double(selected) / Double(reclaimable) : 0
 
-        HStack(spacing: 20) {
-            if viewModel.hasScannedOnce {
-                ArcGauge(
-                    valueText: ByteFormatter.string(fromBytes: selected),
-                    captionText: "/ \(ByteFormatter.string(fromBytes: reclaimable))",
-                    fraction: fraction,
-                    tint: SidebarItem.purge.tint
-                )
-            } else {
-                ArcGaugePlaceholder()
+        VStack(spacing: 16) {
+            HeroHeader(motif: .purge, title: "构建产物", tint: InkPalette.purgeAccent) {
+                HStack(spacing: 10) {
+                    if viewModel.isScanning {
+                        ProgressView().controlSize(.small)
+                        Button("取消") { viewModel.cancelScan() }
+                    } else {
+                        if !viewModel.scanRoots.isEmpty {
+                            // Reconfigure scan roots from the page (full
+                            // add/remove management also lives in Settings).
+                            Button("目录…") { pickDirectories(thenScan: false) }
+                                .help("添加扫描目录")
+                        }
+                        Button(viewModel.scanRoots.isEmpty ? "选择目录" : "开始扫描", action: beginScan)
+                            .disabled(viewModel.isCleaning)
+                    }
+                    Button("清理") {
+                        showingConfirmation = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(InkPalette.purgeAccent)
+                    .disabled(viewModel.selectedCandidates.isEmpty || viewModel.isScanning || viewModel.isCleaning)
+                }
             }
-            VStack(alignment: .leading, spacing: 3) {
-                Text("构建产物").font(.system(size: 16, weight: .bold))
+
+            HStack(spacing: 20) {
                 if viewModel.hasScannedOnce {
-                    Text("已选中 \(Int(fraction * 100))% · \(viewModel.candidates.count) 个项目")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    RingGauge(
+                        progress: fraction,
+                        valueText: ByteFormatter.string(fromBytes: selected),
+                        captionText: "/ \(ByteFormatter.string(fromBytes: reclaimable))",
+                        tint: InkPalette.purgeAccent,
+                        diameter: 88,
+                        lineWidth: 8
+                    )
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("已选中 \(Int(fraction * 100))%")
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(viewModel.candidates.count) 个项目")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
+                    RingGaugePlaceholder(diameter: 88, lineWidth: 8)
                     Text("扫描项目目录中的构建产物")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Spacer()
             }
-            Spacer()
-            if viewModel.isScanning {
-                ProgressView()
-                    .controlSize(.small)
-                Button("取消") { viewModel.cancelScan() }
-            } else {
-                Button("开始扫描") { viewModel.startScan() }
-                    .disabled(viewModel.isCleaning)
-            }
-            Button("清理") {
-                showingConfirmation = true
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(SidebarItem.purge.tint)
-            .disabled(viewModel.selectedCandidates.isEmpty || viewModel.isScanning || viewModel.isCleaning)
         }
         .padding()
-        .background(HeroHeaderWash(tint: SidebarItem.purge.tint))
     }
 
     private func summaryMessage(_ summary: CleanupSummary) -> String {
@@ -116,5 +195,13 @@ struct PurgeView: View {
 }
 
 #Preview {
-    PurgeView()
+    PurgeView(viewModel: PurgeViewModel())
+}
+
+private struct PurgeConfirmItem: ConfirmSheetItem {
+    let candidate: PurgeCandidate
+    var id: String { candidate.id }
+    var displayName: String { "\(candidate.projectName) · \(candidate.artifactLabel)" }
+    var sizeText: String? { candidate.sizeBytes.map(ByteFormatter.string(fromBytes:)) }
+    var riskBadge: CategoryRowRisk? { candidate.isRecent ? .caution : nil }
 }

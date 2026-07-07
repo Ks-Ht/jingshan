@@ -8,6 +8,25 @@ import Foundation
 /// directory trees during a scan; that will be added alongside the
 /// scanners rather than growing this type into something it isn't yet.
 public enum FileSizeCalculator {
+    /// Actual on-disk allocation of a single file (not its logical/apparent
+    /// size). For a sparse file the two diverge wildly — Docker's VM disk
+    /// image `Docker.raw` reports a logical size of roughly the whole volume
+    /// (~228 GB on the dev machine) while it actually occupies far less
+    /// (~1.8 GB). The logical size is both wrong and alarming for a "space
+    /// you'd reclaim" figure, so anything sparse must be measured this way.
+    /// Returns the same number `du` reports (`st_blocks × 512`, surfaced here
+    /// via `totalFileAllocatedSize`).
+    public static func allocatedSize(ofPath path: String) -> Int64? {
+        let url = URL(fileURLWithPath: path)
+        guard let values = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]) else {
+            return nil
+        }
+        if let allocated = values.totalFileAllocatedSize { return Int64(allocated) }
+        if let allocated = values.fileAllocatedSize { return Int64(allocated) }
+        if let logical = values.fileSize { return Int64(logical) }
+        return nil
+    }
+
     public static func size(ofPath path: String, fileManager: FileManager = .default) -> Int64? {
         var isDirectory: ObjCBool = false
         guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory) else {

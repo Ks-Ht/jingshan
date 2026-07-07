@@ -40,7 +40,7 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         CODE_SIGN_ENTITLEMENTS: App/Jingshan.entitlements
         ENABLE_PREVIEWS: "YES"
-        MARKETING_VERSION: "0.7.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "0.8.0"
+        CURRENT_PROJECT_VERSION: "2"
     dependencies:
       - package: JingshanCore

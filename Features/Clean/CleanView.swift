@@ -3,7 +3,7 @@ import JingshanCore
 import SwiftUI
 
 struct CleanView: View {
-    @State private var viewModel = CleanViewModel()
+    let viewModel: CleanViewModel
     @State private var hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
     @State private var showingConfirmation = false
     @State private var showingEmptyTrashConfirmation = false
@@ -17,13 +17,16 @@ struct CleanView: View {
             }
         }
         .navigationTitle("清理")
+        .tint(InkPalette.cleanAccent) // module color for all controls here, not system blue
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
         }
         .sheet(isPresented: $showingConfirmation) {
-            CleanConfirmationSheet(
-                selectedCount: viewModel.selectedItems.count,
-                totalBytes: viewModel.totalSelectedBytes,
+            ConfirmSheetShell(
+                title: "确认清理",
+                items: confirmItems,
+                totalSizeText: ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes),
+                extraAcknowledgment: { _ in EmptyView() },
                 onConfirm: { permanently in
                     showingConfirmation = false
                     Task { await viewModel.performCleanup(permanently: permanently) }
@@ -61,11 +64,19 @@ struct CleanView: View {
             header
             Divider()
             if viewModel.categories.isEmpty {
-                ContentUnavailableView(
-                    viewModel.isScanning ? "正在扫描…" : "还没有扫描结果",
-                    systemImage: "magnifyingglass",
-                    description: Text(viewModel.isScanning ? "首次扫描可能需要一些时间。" : "点击“开始扫描”查看可清理的缓存、日志与废纸篓。")
-                )
+                if viewModel.isScanning {
+                    ScanningStateView(statusText: "首次扫描可能需要一些时间…")
+                        .padding(24)
+                } else {
+                    EmptyStateView(
+                        systemImage: "magnifyingglass",
+                        title: "还没有扫描结果",
+                        message: "点击“开始扫描”查看可清理的缓存、日志与废纸篓。",
+                        actionTitle: "开始扫描",
+                        action: { viewModel.startScan() }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             } else {
                 List {
                     ForEach(viewModel.displayGroups) { group in
@@ -77,6 +88,16 @@ struct CleanView: View {
                 }
             }
         }
+    }
+
+    /// Items currently selected for cleanup, re-using the same real-world
+    /// display names `displayGroups` already computes (rather than raw
+    /// file paths) so the confirm sheet's itemized list reads the same way
+    /// the list on screen does.
+    private var confirmItems: [CleanConfirmItem] {
+        viewModel.displayGroups.flatMap(\.items)
+            .filter { viewModel.isSelected($0.item) }
+            .map(CleanConfirmItem.init)
     }
 
     private func trashRow(_ item: ScannableItem) -> some View {
@@ -111,47 +132,52 @@ struct CleanView: View {
         let selected = viewModel.totalSelectedBytes
         let fraction = reclaimable > 0 ? Double(selected) / Double(reclaimable) : 0
 
-        HStack(spacing: 20) {
-            if viewModel.hasScannedOnce {
-                ArcGauge(
-                    valueText: ByteFormatter.string(fromBytes: selected),
-                    captionText: "/ \(ByteFormatter.string(fromBytes: reclaimable))",
-                    fraction: fraction,
-                    tint: SidebarItem.clean.tint
-                )
-            } else {
-                ArcGaugePlaceholder()
+        VStack(spacing: 16) {
+            HeroHeader(motif: .clean, title: "清理", tint: InkPalette.cleanAccent) {
+                HStack(spacing: 10) {
+                    if viewModel.isScanning {
+                        ProgressView().controlSize(.small)
+                        Button("取消") { viewModel.cancelScan() }
+                    } else {
+                        Button("开始扫描") { viewModel.startScan() }
+                            .disabled(viewModel.isCleaning)
+                    }
+                    Button("清理") {
+                        showingConfirmation = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(InkPalette.cleanAccent)
+                    .disabled(viewModel.selectedItems.isEmpty || viewModel.isScanning || viewModel.isCleaning)
+                }
             }
-            VStack(alignment: .leading, spacing: 3) {
-                Text("清理").font(.system(size: 16, weight: .bold))
+
+            HStack(spacing: 20) {
                 if viewModel.hasScannedOnce {
-                    Text("已选中 \(Int(fraction * 100))% · \(viewModel.displayGroups.count) 个分类可清理")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    RingGauge(
+                        progress: fraction,
+                        valueText: ByteFormatter.string(fromBytes: selected),
+                        captionText: "/ \(ByteFormatter.string(fromBytes: reclaimable))",
+                        tint: InkPalette.cleanAccent,
+                        diameter: 88,
+                        lineWidth: 8
+                    )
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("已选中 \(Int(fraction * 100))%")
+                            .font(.subheadline.weight(.semibold))
+                        Text("\(viewModel.displayGroups.count) 个分类可清理")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 } else {
+                    RingGaugePlaceholder(diameter: 88, lineWidth: 8)
                     Text("尚未扫描 · 点击“开始扫描”查看可清理内容")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Spacer()
             }
-            Spacer()
-            if viewModel.isScanning {
-                ProgressView()
-                    .controlSize(.small)
-                Button("取消") { viewModel.cancelScan() }
-            } else {
-                Button("开始扫描") { viewModel.startScan() }
-                    .disabled(viewModel.isCleaning)
-            }
-            Button("清理") {
-                showingConfirmation = true
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(SidebarItem.clean.tint)
-            .disabled(viewModel.selectedItems.isEmpty || viewModel.isScanning || viewModel.isCleaning)
         }
         .padding()
-        .background(HeroHeaderWash(tint: SidebarItem.clean.tint))
     }
 
     private func summaryMessage(_ summary: CleanupSummary) -> String {
@@ -174,5 +200,16 @@ struct CleanView: View {
 }
 
 #Preview {
-    CleanView()
+    CleanView(viewModel: CleanViewModel())
+}
+
+/// Adapts a `ClassifiedItem` to `ConfirmSheetShell`'s itemized-list
+/// requirement. Selected items are already filtered to non-protected ones
+/// by the time they reach the confirm sheet, so no risk badge is needed here.
+private struct CleanConfirmItem: ConfirmSheetItem {
+    let classified: ClassifiedItem
+    var id: String { classified.id }
+    var displayName: String { classified.displayName }
+    var sizeText: String? { classified.item.sizeBytes.map(ByteFormatter.string(fromBytes:)) }
+    var riskBadge: CategoryRowRisk? { nil }
 }

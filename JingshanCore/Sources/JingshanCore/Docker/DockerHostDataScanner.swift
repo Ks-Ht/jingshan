@@ -54,7 +54,10 @@ public struct DockerHostDataScanner: Sendable {
         guard let path = candidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
             return nil
         }
-        let size = await FileSizeCalculator.sizeAsync(ofPath: path)
+        // The VM disk is a sparse image: its logical size balloons to ~the
+        // whole volume while it really occupies far less, so measure actual
+        // on-disk allocation, not logical size.
+        let size = FileSizeCalculator.allocatedSize(ofPath: path)
 
         return DockerCleanableItem(
             id: "hostDiskImage:\(path)",

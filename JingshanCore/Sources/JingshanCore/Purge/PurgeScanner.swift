@@ -31,30 +31,52 @@ public struct PurgeScanner: Sendable {
     }
 
     public static func defaultRoots(homeDirectory: String = NSHomeDirectory(), fileManager: FileManager = .default) -> [String] {
-        ["Projects", "GitHub", "dev"]
+        ["Projects", "Developer", "GitHub", "dev"]
             .map { homeDirectory + "/" + $0 }
             .filter { fileManager.fileExists(atPath: $0) }
     }
 
-    public func scan(roots: [String]) async -> [PurgeCandidate] {
-        var results: [PurgeCandidate] = []
-        for root in roots {
-            if Task.isCancelled { break }
-            results.append(contentsOf: await walk(directory: root, depth: 0))
+    /// Progress snapshot for live scan feedback: which directory is being
+    /// walked right now, and how many artifacts have been found so far.
+    public struct Progress: Sendable {
+        public let currentPath: String
+        public let foundCount: Int
+        public init(currentPath: String, foundCount: Int) {
+            self.currentPath = currentPath
+            self.foundCount = foundCount
         }
-        return results
     }
 
-    private func walk(directory: String, depth: Int) async -> [PurgeCandidate] {
-        guard depth <= maxDepth, !Task.isCancelled else { return [] }
+    /// Sequential accumulator so a running found-count can be reported mid-
+    /// walk. Only ever touched by the single scan task (never sent across
+    /// tasks), so the unchecked conformance is safe.
+    private final class Accumulator: @unchecked Sendable {
+        var results: [PurgeCandidate] = []
+    }
+
+    public func scan(roots: [String], onProgress: (@Sendable (Progress) -> Void)? = nil) async -> [PurgeCandidate] {
+        let acc = Accumulator()
+        for root in roots {
+            if Task.isCancelled { break }
+            await walk(directory: root, depth: 0, acc: acc, onProgress: onProgress)
+        }
+        return acc.results
+    }
+
+    private func walk(directory: String, depth: Int, acc: Accumulator, onProgress: (@Sendable (Progress) -> Void)?) async {
+        guard depth <= maxDepth, !Task.isCancelled else { return }
+        // Report on entering the top few levels (few, high-signal — the
+        // project being scanned) rather than every directory, to keep UI
+        // update frequency sane on deep trees.
+        if depth <= 2 { onProgress?(Progress(currentPath: directory, foundCount: acc.results.count)) }
+
         let fileManager = FileManager.default
-        guard let entries = try? fileManager.contentsOfDirectory(atPath: directory) else { return [] }
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: directory) else { return }
         let siblingNames = Set(entries)
 
-        var results: [PurgeCandidate] = []
         for (index, entry) in entries.enumerated() {
             if index % 64 == 0 {
-                if Task.isCancelled { break }
+                if Task.isCancelled { return }
                 await Task.yield()
             }
             if entry == ".git" { continue }
@@ -77,7 +99,7 @@ public struct PurgeScanner: Sendable {
                 let size = await FileSizeCalculator.sizeAsync(ofPath: fullPath)
                 let projectName = (directory as NSString).lastPathComponent
                 let isRecent = Self.isRecentlyModified(directory, thresholdDays: recentThresholdDays, fileManager: fileManager)
-                results.append(
+                acc.results.append(
                     PurgeCandidate(
                         id: PathValidator.normalize(fullPath),
                         path: fullPath,
@@ -88,12 +110,12 @@ public struct PurgeScanner: Sendable {
                         riskNote: rule.riskNote
                     )
                 )
+                onProgress?(Progress(currentPath: fullPath, foundCount: acc.results.count))
                 continue
             }
 
-            results.append(contentsOf: await walk(directory: fullPath, depth: depth + 1))
+            await walk(directory: fullPath, depth: depth + 1, acc: acc, onProgress: onProgress)
         }
-        return results
     }
 
     private static func isRecentlyModified(_ path: String, thresholdDays: Int, fileManager: FileManager) -> Bool {

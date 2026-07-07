@@ -46,6 +46,22 @@ struct SystemMetricsSamplerTests {
         #expect(second.network.downloadBytesPerSecond >= 0)
         #expect(second.network.uploadBytesPerSecond >= 0)
     }
+
+    @Test("battery reading is always present after a real sample, with a plausible percentage regardless of hardware")
+    func batteryReadingIsPlausible() async throws {
+        // Deliberately does not assert `isPresent` either way — this suite
+        // runs on whatever Mac happens to build the project, desktop or
+        // laptop, and a real reading should never crash or return an
+        // out-of-range percentage on either kind. `snapshot.battery` itself
+        // must be non-nil, though: `SystemMetricsSampler.sample()` always
+        // populates it (only the unsampled `.empty` sentinel leaves it nil).
+        let sampler = SystemMetricsSampler()
+        let snapshot = await sampler.sample()
+
+        let battery = try #require(snapshot.battery)
+        #expect(battery.percentage >= 0)
+        #expect(battery.percentage <= 100)
+    }
 }
 
 @Suite("NetworkMonitor interface filtering")

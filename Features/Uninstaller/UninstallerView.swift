@@ -2,14 +2,36 @@ import AppKit
 import JingshanCore
 import SwiftUI
 
+private enum AppSortOrder: String, CaseIterable, Identifiable {
+    case name
+    case size
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .name: return "按名称"
+        case .size: return "按大小"
+        }
+    }
+}
+
 struct UninstallerView: View {
-    @State private var viewModel = UninstallerViewModel()
+    let viewModel: UninstallerViewModel
     @State private var searchText = ""
+    @State private var sortOrder: AppSortOrder = .name
     @State private var showingConfirmation = false
+    @State private var acknowledgedDestructive = false
 
     private var filteredApps: [InstalledApplication] {
-        guard !searchText.isEmpty else { return viewModel.installedApps }
-        return viewModel.installedApps.filter { $0.displayName.localizedCaseInsensitiveContains(searchText) }
+        let base = searchText.isEmpty
+            ? viewModel.installedApps
+            : viewModel.installedApps.filter { $0.displayName.localizedCaseInsensitiveContains(searchText) }
+        switch sortOrder {
+        case .name:
+            return base.sorted { $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending }
+        case .size:
+            return base.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
+        }
     }
 
     var body: some View {
@@ -19,6 +41,7 @@ struct UninstallerView: View {
             detailColumn
         }
         .navigationTitle("卸载应用")
+        .tint(InkPalette.uninstallerAccent)
         .task {
             if viewModel.installedApps.isEmpty {
                 viewModel.startScan()
@@ -30,13 +53,19 @@ struct UninstallerView: View {
             // `detailColumn`, which SwiftUI makes unreachable while this
             // modal sheet is up. If the residual list is ever moved inside
             // the sheet itself (or presented non-modally), this must become
-            // a live binding, or `acknowledgedDestructive` could stay valid
+            // a live binding, or the acknowledgment toggles could stay valid
             // against a selection the user changed after acknowledging it.
-            UninstallerConfirmationSheet(
-                appName: viewModel.selectedApp?.displayName ?? "",
-                selectedCount: viewModel.selectedItemCount,
-                totalBytes: viewModel.totalSelectedBytes,
-                hasDestructiveSelection: viewModel.hasDestructiveSelection,
+            ConfirmSheetShell(
+                title: "确认卸载「\(viewModel.selectedApp?.displayName ?? "")」",
+                items: confirmItems,
+                totalSizeText: ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes),
+                extraAcknowledgment: { _ in
+                    UninstallerDestructiveAcknowledgment(
+                        hasDestructiveSelection: viewModel.hasDestructiveSelection,
+                        acknowledged: $acknowledgedDestructive
+                    )
+                },
+                extraAcknowledgmentSatisfied: { _ in !viewModel.hasDestructiveSelection || acknowledgedDestructive },
                 onConfirm: { permanently in
                     showingConfirmation = false
                     Task { await viewModel.performUninstall(permanently: permanently) }
@@ -62,42 +91,92 @@ struct UninstallerView: View {
     private var appListColumn: some View {
         VStack(spacing: 0) {
             HStack {
-                TextField("搜索应用", text: $searchText)
-                    .textFieldStyle(.roundedBorder)
+                Text("已安装的应用").font(.headline)
+                Spacer()
+                Picker("排序", selection: $sortOrder) {
+                    ForEach(AppSortOrder.allCases) { order in
+                        Text(order.title).tag(order)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(maxWidth: 100)
                 if viewModel.isScanningApps {
-                    ProgressView()
-                        .controlSize(.small)
+                    ProgressView().controlSize(.small)
                 } else {
                     Button("刷新") { viewModel.startScan() }
                 }
             }
-            .padding(10)
+            .padding(.horizontal, 10)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+
+            // Search lives here, inside the list column — not via `.searchable`,
+            // which macOS floats up into the window title bar where it collided
+            // with the top tab navigation. Themed (module accent via the view's
+            // `.tint`), no system-blue focus ring.
+            searchField
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
 
             Divider()
 
             if filteredApps.isEmpty {
-                ContentUnavailableView(
-                    viewModel.isScanningApps ? "正在扫描已安装的应用…" : "没有找到应用",
-                    systemImage: "app.dashed"
-                )
-                .frame(maxHeight: .infinity)
+                if viewModel.isScanningApps {
+                    ScanningStateView(statusText: "正在扫描已安装的应用…")
+                        .padding(24)
+                        .frame(maxHeight: .infinity)
+                } else {
+                    EmptyStateView(systemImage: "app.dashed", title: "没有找到应用", message: "换个关键词试试，或者刷新一下列表。")
+                        .frame(maxHeight: .infinity)
+                }
             } else {
-                List(filteredApps, selection: appSelectionBinding) { app in
-                    UninstallerAppRow(app: app).tag(app.id)
+                // Custom selection (accent-soft fill + a left accent bar)
+                // instead of `List(selection:)`'s macOS default bright-blue
+                // full-row highlight, which clashes with the ink palette.
+                // Each row is a real Button, so it stays keyboard-focusable.
+                List(filteredApps) { app in
+                    Button { viewModel.selectApp(app) } label: {
+                        UninstallerAppRow(app: app)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(rowBackground(isSelected: viewModel.selectedApp?.id == app.id))
+                    .accessibilityAddTraits(viewModel.selectedApp?.id == app.id ? [.isButton, .isSelected] : .isButton)
                 }
             }
         }
         .frame(minWidth: 260, idealWidth: 280, maxWidth: 340)
     }
 
-    private var appSelectionBinding: Binding<String?> {
-        Binding(
-            get: { viewModel.selectedApp?.id },
-            set: { newID in
-                guard let newID, let app = viewModel.installedApps.first(where: { $0.id == newID }) else { return }
-                viewModel.selectApp(app)
+    private var searchField: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("搜索应用", text: $searchText)
+                .textFieldStyle(.plain)
+            if !searchText.isEmpty {
+                Button { searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("清除搜索")
             }
-        )
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(InkPalette.hairline, lineWidth: 0.5))
+    }
+
+    private func rowBackground(isSelected: Bool) -> some View {
+        HStack(spacing: 0) {
+            Rectangle()
+                .fill(isSelected ? InkPalette.uninstallerAccent : Color.clear)
+                .frame(width: 3)
+            (isSelected ? InkPalette.uninstallerAccent.opacity(0.12) : Color.clear)
+        }
     }
 
     @ViewBuilder
@@ -110,10 +189,11 @@ struct UninstallerView: View {
                     protectionWarning(for: verdict)
                 }
                 if viewModel.isScanningResiduals {
-                    ProgressView("正在查找残留文件…")
+                    ScanningStateView(statusText: "正在查找残留文件…")
+                        .padding(24)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if viewModel.residualCandidates.isEmpty {
-                    ContentUnavailableView("没有找到残留文件", systemImage: "checkmark.circle", description: Text("只会卸载应用本体。"))
+                    EmptyStateView(systemImage: "checkmark.circle", title: "没有找到残留文件", message: "只会卸载应用本体。")
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List(viewModel.residualCandidates) { candidate in
@@ -123,10 +203,10 @@ struct UninstallerView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            ContentUnavailableView(
-                "选择一个应用",
+            EmptyStateView(
                 systemImage: "minus.app",
-                description: Text("从左侧列表选择要卸载的应用，会自动查找它在其他位置留下的文件。")
+                title: "选择一个应用",
+                message: "从左侧列表选择要卸载的应用，会自动查找它在其他位置留下的文件。"
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -145,13 +225,16 @@ struct UninstallerView: View {
             }
             Spacer()
             StatDisplay(value: ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes), label: "将处理的大小")
-            Button("卸载…") { showingConfirmation = true }
-                .buttonStyle(.borderedProminent)
-                .tint(SidebarItem.uninstaller.tint)
-                .disabled(!viewModel.canUninstallSelectedApp)
+            Button("卸载…") {
+                acknowledgedDestructive = false // fresh acknowledgment required for every new confirm-sheet presentation
+                showingConfirmation = true
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(InkPalette.uninstallerAccent)
+            .disabled(!viewModel.canUninstallSelectedApp)
         }
         .padding()
-        .background(HeroHeaderWash(tint: SidebarItem.uninstaller.tint))
+        .background(InkPalette.paper) // clean; the old corner radial "wash" blob was removed per the ink-wash cleanup
     }
 
     private func isNotProtected(_ verdict: ProtectionEvaluator.Verdict) -> Bool {
@@ -164,10 +247,10 @@ struct UninstallerView: View {
             switch verdict {
             case .runningApp:
                 Label("该应用正在运行，请先退出后再卸载。", systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(RiskTint.caution)
             case .staticallyProtected(let reason):
                 Label("该应用受保护，无法卸载：\(reason)", systemImage: "lock.fill")
-                    .foregroundStyle(.red)
+                    .foregroundStyle(RiskTint.destructive)
             case .notProtected:
                 EmptyView()
             }
@@ -188,8 +271,76 @@ struct UninstallerView: View {
         }
         return parts.joined(separator: "，")
     }
+
+    /// The app itself (if any) plus every currently-selected residual,
+    /// mirroring exactly what `viewModel.selectedItemCount`/`totalSelectedBytes`
+    /// already count — a snapshot at sheet-presentation time, per the safety
+    /// note on the `.sheet` modifier above.
+    private var confirmItems: [UninstallerConfirmItem] {
+        var items: [UninstallerConfirmItem] = []
+        if let app = viewModel.selectedApp {
+            items.append(.app(app))
+        }
+        items.append(contentsOf: viewModel.residualCandidates
+            .filter { viewModel.selectedResidualIDs.contains($0.id) }
+            .map(UninstallerConfirmItem.residual))
+        return items
+    }
 }
 
 #Preview {
-    UninstallerView()
+    UninstallerView(viewModel: UninstallerViewModel())
+}
+
+private enum UninstallerConfirmItem: ConfirmSheetItem {
+    case app(InstalledApplication)
+    case residual(ResidualCandidate)
+
+    var id: String {
+        switch self {
+        case .app(let app): return "app-\(app.id)"
+        case .residual(let candidate): return candidate.id
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .app(let app): return "\(app.displayName)（应用本体）"
+        case .residual(let candidate): return candidate.displayLabel
+        }
+    }
+
+    var sizeText: String? {
+        switch self {
+        case .app(let app): return app.sizeBytes.map(ByteFormatter.string(fromBytes:))
+        case .residual(let candidate): return candidate.sizeBytes.map(ByteFormatter.string(fromBytes:))
+        }
+    }
+
+    var riskBadge: CategoryRowRisk? {
+        switch self {
+        case .app: return nil
+        case .residual(let candidate): return candidate.tier.categoryRowRisk
+        }
+    }
+}
+
+/// Uninstaller's destructive-tier gate (sandbox container data may be real
+/// app data, not just cache) — same copy and behavior as the old
+/// `UninstallerConfirmationSheet`'s inline branch, relocated so
+/// `ConfirmSheetShell` can inject it via `extraAcknowledgment`.
+private struct UninstallerDestructiveAcknowledgment: View {
+    let hasDestructiveSelection: Bool
+    @Binding var acknowledged: Bool
+
+    var body: some View {
+        if hasDestructiveSelection {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("包含沙盒容器数据（可能是应用的实际数据而非仅缓存），请确认后再继续。", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(RiskTint.irreversible)
+                    .font(.callout)
+                Toggle("我确认这些容器数据不再需要", isOn: $acknowledged)
+            }
+        }
+    }
 }

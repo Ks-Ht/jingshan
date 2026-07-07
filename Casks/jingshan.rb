@@ -1,6 +1,6 @@
 cask "jingshan" do
-  version "0.7.0"
-  sha256 "851523a9a5d2af561aa66436d74e645ad74eea3c7af1aa6fe943726aa7953f05"
+  version "0.8.0"
+  sha256 "bbda09407c9252869d87843654ea2496a0d1cf85f4a35edd5ab656ecc6a99262"
 
   url "https://github.com/Ks-Ht/jingshan/releases/download/v#{version}/Jingshan-#{version}.zip"
   name "净山"

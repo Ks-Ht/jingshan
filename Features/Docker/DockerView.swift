@@ -3,8 +3,9 @@ import JingshanCore
 import SwiftUI
 
 struct DockerView: View {
-    @State private var viewModel = DockerViewModel()
+    let viewModel: DockerViewModel
     @State private var showingConfirmation = false
+    @State private var acknowledgedDestructive = false
 
     var body: some View {
         Group {
@@ -13,27 +14,37 @@ struct DockerView: View {
                 ProgressView("检测 Docker…")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             case .notInstalled where viewModel.hostItems.isEmpty:
-                ContentUnavailableView(
-                    "未检测到 Docker",
+                EmptyStateView(
                     systemImage: "shippingbox",
-                    description: Text("请先安装 Docker Desktop，然后回到净山。")
+                    title: "未检测到 Docker",
+                    message: "请先安装 Docker Desktop，然后回到净山。"
                 )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             default:
                 scanContent
             }
         }
         .navigationTitle("Docker")
+        .tint(InkPalette.dockerAccent)
         .task {
             if viewModel.daemonState == .checking {
                 viewModel.refresh()
             }
         }
         .sheet(isPresented: $showingConfirmation) {
-            DockerConfirmationSheet(
-                selectedCount: viewModel.selectedItems.count,
-                totalBytes: viewModel.totalSelectedBytes,
-                hasDestructiveSelection: viewModel.hasDestructiveSelection,
-                onConfirm: {
+            ConfirmSheetShell(
+                title: "确认清理 Docker 资源",
+                items: viewModel.selectedItems.map(DockerConfirmItem.init),
+                totalSizeText: ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes),
+                permanentDeleteToggle: false,
+                extraAcknowledgment: { _ in
+                    DockerDestructiveAcknowledgment(
+                        hasDestructiveSelection: viewModel.hasDestructiveSelection,
+                        acknowledged: $acknowledgedDestructive
+                    )
+                },
+                extraAcknowledgmentSatisfied: { _ in !viewModel.hasDestructiveSelection || acknowledgedDestructive },
+                onConfirm: { _ in
                     showingConfirmation = false
                     Task { await viewModel.performCleanup() }
                 },
@@ -60,8 +71,8 @@ struct DockerView: View {
             header
             Divider()
             if viewModel.isScanning && viewModel.hostItems.isEmpty && viewModel.runtimeItems.isEmpty {
-                ProgressView("正在扫描…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                ScanningStateView(statusText: "正在扫描 Docker 磁盘数据与运行时资源…")
+                    .padding(24)
             } else {
                 List {
                     daemonBanner
@@ -81,34 +92,23 @@ struct DockerView: View {
     @ViewBuilder
     private var daemonBanner: some View {
         if viewModel.daemonState == .daemonNotRunning || viewModel.daemonState == .notInstalled {
-            HStack(spacing: 10) {
-                Image(systemName: "info.circle")
-                    .foregroundStyle(.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Docker 未运行")
-                        .font(.subheadline.weight(.medium))
-                    Text("下面的磁盘数据可以直接清理，无需启动 Docker。要精细清理容器、镜像、构建缓存，请启动 Docker。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                if viewModel.daemonState == .daemonNotRunning {
-                    if viewModel.isStartingDocker {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Button("启动 Docker") {
-                            Task { await viewModel.startDockerDesktop() }
-                        }
-                    }
-                }
-            }
+            InfoBanner(
+                systemImage: "info.circle",
+                message: "Docker 未运行 — 下面的磁盘数据可以直接清理，无需启动 Docker。要精细清理容器、镜像、构建缓存，请启动 Docker。",
+                tint: InkPalette.dockerAccent,
+                actionTitle: viewModel.daemonState == .daemonNotRunning ? "启动 Docker" : nil,
+                action: { Task { await viewModel.startDockerDesktop() } },
+                isLoading: viewModel.isStartingDocker
+            )
             .padding(.vertical, 4)
         } else if viewModel.dockerDesktopRunning && viewModel.daemonState == .available {
             // Docker running: host VM-disk reclaim is intentionally withheld.
-            Label("虚拟磁盘（整个数据存储）需完全退出 Docker Desktop 后才能回收。", systemImage: "info.circle")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 2)
+            InfoBanner(
+                systemImage: "info.circle",
+                message: "虚拟磁盘（整个数据存储）需完全退出 Docker Desktop 后才能回收。",
+                tint: InkPalette.dockerAccent
+            )
+            .padding(.vertical, 2)
         }
     }
 
@@ -160,46 +160,47 @@ struct DockerView: View {
         let selected = viewModel.totalSelectedBytes
         let fraction = scanned > 0 ? Double(selected) / Double(scanned) : 0
 
-        HStack(spacing: 20) {
-            if viewModel.hasScannedOnce {
-                ArcGauge(
-                    valueText: ByteFormatter.string(fromBytes: selected),
-                    captionText: "/ \(ByteFormatter.string(fromBytes: scanned))",
-                    fraction: fraction,
-                    tint: SidebarItem.docker.tint
-                )
-            } else {
-                ArcGaugePlaceholder()
+        VStack(spacing: 16) {
+            HeroHeader(motif: .docker, title: "Docker", tint: InkPalette.dockerAccent) {
+                HStack(spacing: 10) {
+                    if viewModel.isScanning {
+                        ProgressView().controlSize(.small)
+                        Button("取消") { viewModel.cancelScan() }
+                    } else {
+                        Button("重新扫描") { viewModel.refresh() }
+                            .disabled(viewModel.isCleaning)
+                    }
+                    Button("清理") {
+                        acknowledgedDestructive = false // fresh acknowledgment required for every new confirm-sheet presentation
+                        showingConfirmation = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(InkPalette.dockerAccent)
+                    .disabled(viewModel.selectedItems.isEmpty || viewModel.isScanning || viewModel.isCleaning)
+                }
             }
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Docker").font(.system(size: 16, weight: .bold))
+
+            HStack(spacing: 20) {
                 if viewModel.hasScannedOnce {
+                    RingGauge(
+                        progress: fraction,
+                        valueText: ByteFormatter.string(fromBytes: selected),
+                        captionText: "/ \(ByteFormatter.string(fromBytes: scanned))",
+                        tint: InkPalette.dockerAccent,
+                        diameter: 88,
+                        lineWidth: 8
+                    )
                     Text("已选中 \(Int(fraction * 100))%")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline.weight(.semibold))
                 } else {
+                    RingGaugePlaceholder(diameter: 88, lineWidth: 8)
                     Text("扫描 Docker 磁盘数据与运行时资源")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Spacer()
             }
-            Spacer()
-            if viewModel.isScanning {
-                ProgressView()
-                    .controlSize(.small)
-                Button("取消") { viewModel.cancelScan() }
-            } else {
-                Button("重新扫描") { viewModel.refresh() }
-                    .disabled(viewModel.isCleaning)
-            }
-            Button("清理") {
-                showingConfirmation = true
-            }
-            .buttonStyle(.borderedProminent)
-            .tint(SidebarItem.docker.tint)
-            .disabled(viewModel.selectedItems.isEmpty || viewModel.isScanning || viewModel.isCleaning)
         }
-        .background(HeroHeaderWash(tint: SidebarItem.docker.tint))
         .padding()
     }
 
@@ -215,5 +216,36 @@ struct DockerView: View {
 }
 
 #Preview {
-    DockerView()
+    DockerView(viewModel: DockerViewModel())
+}
+
+private struct DockerConfirmItem: ConfirmSheetItem {
+    let item: DockerCleanableItem
+    var id: String { item.id }
+    var displayName: String { item.displayName }
+    var sizeText: String? { item.sizeBytes.map(ByteFormatter.string(fromBytes:)) }
+    var riskBadge: CategoryRowRisk? { item.risk.categoryRowRisk }
+}
+
+/// Docker's destructive-tier gate: same copy and behavior as the old
+/// `DockerConfirmationSheet`'s inline branch, just relocated so
+/// `ConfirmSheetShell` can inject it via `extraAcknowledgment`.
+private struct DockerDestructiveAcknowledgment: View {
+    let hasDestructiveSelection: Bool
+    @Binding var acknowledged: Bool
+
+    var body: some View {
+        if hasDestructiveSelection {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("包含高风险项（正在运行的容器或数据卷），删除后数据无法恢复。", systemImage: "exclamationmark.triangle.fill")
+                    .foregroundStyle(RiskTint.irreversible)
+                    .font(.callout)
+                Toggle("我了解这会永久删除数据，且无法撤销", isOn: $acknowledged)
+            }
+        } else {
+            Text("以上操作都可以通过重新拉取镜像或重建容器恢复，不涉及不可逆的数据丢失。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
 }

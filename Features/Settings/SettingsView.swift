@@ -74,7 +74,7 @@ struct SettingsView: View {
                 }
             } header: {
                 Label("构建产物扫描目录", systemImage: "archivebox")
-                    .foregroundStyle(SidebarItem.purge.tint)
+                    .foregroundStyle(InkPalette.purgeAccent)
             }
         }
         .formStyle(.grouped)

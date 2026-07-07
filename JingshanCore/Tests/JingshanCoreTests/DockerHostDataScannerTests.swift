@@ -12,7 +12,14 @@ struct DockerHostDataScannerTests {
 
         let vmDir = home.appendingPathComponent("Library/Containers/com.docker.docker/Data/vms/0/data", isDirectory: true)
         try fm.createDirectory(at: vmDir, withIntermediateDirectories: true)
-        try TestFixtures.writeFile(at: vmDir.appendingPathComponent("Docker.raw"), contents: String(repeating: "x", count: 5000))
+        // A *sparse* Docker.raw — like the real one — with a 10 GB logical
+        // size but ~zero actual on-disk allocation. The scanner must report
+        // the tiny allocated size, never the huge logical one.
+        let rawURL = vmDir.appendingPathComponent("Docker.raw")
+        fm.createFile(atPath: rawURL.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: rawURL)
+        try handle.truncate(atOffset: 10 * 1024 * 1024 * 1024)
+        try handle.close()
 
         let logDir = home.appendingPathComponent("Library/Containers/com.docker.docker/Data/log", isDirectory: true)
         try fm.createDirectory(at: logDir, withIntermediateDirectories: true)
@@ -41,7 +48,12 @@ struct DockerHostDataScannerTests {
             return
         }
         #expect(path.hasSuffix("Docker.raw"))
-        #expect(disk.sizeBytes == 5000)
+        // Sparse-file guard: the fixture's logical size is 10 GB, but the
+        // scanner must report actual on-disk allocation, so this stays tiny.
+        // (Before the fix it reported the full 10 GB — the real-machine bug
+        // where a ~1.8 GB VM disk showed as ~228 GB.)
+        let size = try #require(disk.sizeBytes)
+        #expect(size < 50_000_000)
     }
 
     @Test("while Docker Desktop is running, the VM disk is withheld entirely (never touchable)")

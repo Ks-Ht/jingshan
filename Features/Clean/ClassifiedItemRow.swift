@@ -6,44 +6,15 @@ struct ClassifiedItemRow: View {
     let viewModel: CleanViewModel
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Toggle(
-                isOn: Binding(
-                    get: { viewModel.isSelected(classified.item) },
-                    set: { viewModel.setSelected(classified.item, $0) }
-                )
-            ) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 4) {
-                        Text(classified.displayName)
-                        if classified.item.isProtected {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(RiskTint.caution)
-                                .help("应用正在运行或受保护，清理时会自动跳过")
-                        }
-                    }
-                    Text(classified.item.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-            .toggleStyle(.checkbox)
-            .disabled(classified.item.isProtected)
-
-            Spacer()
-
-            if let sizeBytes = classified.item.sizeBytes {
-                Text(ByteFormatter.string(fromBytes: sizeBytes))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("大小未知")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.vertical, 2)
+        CategoryRow(
+            title: classified.displayName,
+            subtitle: classified.item.path,
+            risk: classified.item.isProtected ? .caution : nil,
+            sizeText: classified.item.sizeBytes.map(ByteFormatter.string(fromBytes:)),
+            isSelected: viewModel.isSelected(classified.item),
+            isDisabled: classified.item.isProtected,
+            disabledReason: classified.item.isProtected ? "应用正在运行或受保护，清理时会自动跳过" : nil,
+            onToggle: { viewModel.setSelected(classified.item, $0) }
+        )
     }
 }

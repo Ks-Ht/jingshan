@@ -15,6 +15,7 @@ public actor SystemMetricsSampler {
             memory: MemoryMonitor.sample(),
             disk: DiskMonitor.sample(),
             network: networkMonitor.sample(),
+            battery: BatteryMonitor.sample(),
             timestamp: Date()
         )
     }
