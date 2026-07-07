@@ -20,10 +20,10 @@
 
 ```bash
 brew tap ks-ht/jingshan https://github.com/Ks-Ht/jingshan
-brew install --cask --no-quarantine jingshan
+brew install --cask jingshan
 ```
 
-`--no-quarantine` 是必须的：净山目前是 ad-hoc 本机签名（没有 Apple Developer ID，没有公证），不加这个参数首次启动会被 Gatekeeper 拦截。如果安装时忘了加，也可以事后手动放行：
+净山目前是 ad-hoc 本机签名（没有 Apple Developer ID，没有公证）。Cask 安装脚本会在安装后自动清除隔离属性（quarantine），一般直接双击打开即可。如果仍然被 Gatekeeper 拦截，可以事后手动放行：
 
 ```bash
 xattr -cr /Applications/净山.app

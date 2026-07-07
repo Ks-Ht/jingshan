@@ -12,6 +12,11 @@ cask "jingshan" do
 
   app "净山.app"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                    args: ["-cr", "#{appdir}/净山.app"]
+  end
+
   zap trash: [
     "~/Library/Application Support/Jingshan",
     "~/Library/Logs/Jingshan",
@@ -20,8 +25,10 @@ cask "jingshan" do
 
   caveats <<~EOS
     净山目前是 ad-hoc 本机签名（没有 Apple Developer ID，未经苹果公证）。
-    如果安装时没有加 --no-quarantine，首次启动会被 Gatekeeper 拦截，
-    需要在 Finder 里右键点击 净山.app → 打开，或执行：
+    安装时已自动清除隔离属性（quarantine），可以直接双击打开。
+
+    如果仍然被 Gatekeeper 拦截（提示"无法打开，因为无法验证开发者"），
+    可以在 Finder 里右键点击 净山.app → 打开，或手动执行：
       xattr -cr /Applications/净山.app
 
     净山需要「完全磁盘访问权限」才能扫描缓存等位置，首次运行会引导前往
