@@ -252,3 +252,10 @@
 - **A3 状态监控扩展（可靠子集 + 优雅降级）**：`JingshanCore/Metrics/SystemInfo`（sysctl `hw.model`/`getloadavg`/ProcessInfo：机型/系统/核心/内存/开机时长/负载）+ `ProcessLister`（shell `/bin/ps -Aceo pid,pcpu,pmem,comm -r` 取 Top 进程，只读）。`StatusViewModel` 加 `systemInfo`（每 tick）+ `topProcesses`（每 2 tick，ps 是子进程）。`StatusView` 加 3 张 Bento 卡：`PerCoreCard`（每核心占用，数据本来就采了）、`SystemInfoCard`、`TopProcessesCard`。**GPU/温度/风扇/SMART 按既定决策不做（无可靠公开 API，优雅缺席）**，提示词也允许"取不到优雅降级"。
 - **验证**：`swift test` **151/151**（+LargeFileScanner）；Debug/Release 构建通过、`nm` 零 harness；离屏渲染确认——status.png（每核心 8 条+系统信息+Top 进程，全 Bento 底对齐）、largefiles.png（花青 hero+空态）、menubar.png（面板结构，指标"正在采集"因离屏无实时采样）、topnav.png（7 标签胶囊不挤）；重装 `/Applications/净山.app` 冒烟无 crash。**改动未提交、未发版。**
 - **说明/小遗留**：大文件 hero 暂借用 status 水墨诗句（"登高望远，万象有序"，未加专属 motif，可后续补）；菜单栏"CPU%"图标样式与常驻采样需真机看；A3 的点击卡片展开详情、内存 swap 分解、网络分接口/连接数、SMART 未做（可后续）。至此提示词 Part A（A1–A6）+ Part B（B1/B2）核心全部落地，Part C 也早已修完。
+
+## 续二十六（提交 M24–M26 到 main + 发布 v0.8.1）
+用户先问了"每次更新都要去设置删了重加权限"——解释：ad-hoc 签名每次构建 cdhash 变→TCC 认成新 App，光开关无效必须删了重加；根治要么固定自签名证书（免费）要么 Developer ID+公证（$99/年）。用户选"签名先不考虑，合并代码并发布"。
+- **合并**：M24–M26 全部改动（55 文件）一个 `feat:` 提交 `0febdad`，推送 main（本仓库一直直推 main，无 PR 分支，推送即合并）。
+- **发布 v0.8.1**：`project.yml` 0.8.0→0.8.1（`CURRENT_PROJECT_VERSION` 2→3），`xcodegen`+Release 构建（harness 零符号），`ditto` 打包 `Jingshan-0.8.1.zip`（1.3 MB），`shasum` = `70cc55d0…db895`，`gh release create v0.8.1`（发到 kongshan-0924，带中文 release notes），更新 `Casks/jingshan.rb` version/sha256。
+- 发布页：https://github.com/kongshan-0924/jingshan/releases/tag/v0.8.1
+- **签名/权限痛点未解决**（用户暂缓）：ad-hoc 签名 → 每次更新仍需去系统设置删旧条目重加 FDA。免费根治方案备好（钥匙串建"代码签名"自签证书 + `project.yml` 用它签名），随时可做。
