@@ -71,30 +71,35 @@ public enum FileSizeCalculator {
             return allocatedSize(ofPath: path)
         }
 
-        guard let enumerator = fileManager.enumerator(atPath: path) else {
+        // Stream the tree with the URL enumerator (one metadata fetch per
+        // entry, cancellable mid-walk) instead of the old `allObjects`
+        // approach, which materialized every path string up front — an
+        // uncancellable full-tree walk before the first size was summed.
+        // Symlinks are skipped outright: following one would bill the TARGET's
+        // size to this directory while deleting only removes the link.
+        let keys: Set<URLResourceKey> = [.isRegularFileKey, .isSymbolicLinkKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey]
+        guard let enumerator = fileManager.enumerator(
+            at: URL(fileURLWithPath: path),
+            includingPropertiesForKeys: Array(keys)
+        ) else {
             return nil
         }
-
-        // Materialize the names up front: NSEnumerator's fast-enumeration
-        // bridging (`for case ... in enumerator`) is unavailable from async
-        // contexts, and this also gives a stable snapshot to iterate with
-        // cooperative cancellation checks below.
-        let names = enumerator.allObjects as? [String] ?? []
 
         // Sum actual on-disk allocation per file (not logical `.fileSize`) — the
         // real reclaimable-space figure, and sparse-file-safe.
         var total: Int64 = 0
         var checked = 0
-        for name in names {
+        while let object = enumerator.nextObject() {
+            guard let url = object as? URL else { continue }
             checked += 1
             if checked % 256 == 0 {
                 if Task.isCancelled { return nil }
                 await Task.yield()
             }
-            let fullPath = (path as NSString).appendingPathComponent(name)
-            var isDir: ObjCBool = false
-            guard fileManager.fileExists(atPath: fullPath, isDirectory: &isDir), !isDir.boolValue else { continue }
-            total += allocatedSize(ofPath: fullPath) ?? 0
+            guard let values = try? url.resourceValues(forKeys: keys) else { continue }
+            if values.isSymbolicLink == true { continue }
+            guard values.isRegularFile == true else { continue }
+            total += Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? 0)
         }
         return total
     }

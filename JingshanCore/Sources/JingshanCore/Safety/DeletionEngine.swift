@@ -107,7 +107,7 @@ public final class DeletionEngine: DeletionEngineProtocol, @unchecked Sendable {
                 return .skippedExcluded(validated)
             }
 
-            switch protectionEvaluator.evaluate(bundleIdentifier: bundleID) {
+            switch protectionEvaluator.evaluate(bundleIdentifier: bundleID, path: validated.originalPath) {
             case .notProtected:
                 break
             case .staticallyProtected(let reason):

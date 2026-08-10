@@ -158,4 +158,64 @@ struct ResidualFileScannerTests {
 
         #expect(found.isEmpty)
     }
+
+    @Test("finds an Application Scripts directory by exact bundle id")
+    func findsApplicationScripts() async throws {
+        let home = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(home) }
+        let path = home.appendingPathComponent("Library/Application Scripts/com.example.app")
+        try fm.createDirectory(at: path, withIntermediateDirectories: true)
+
+        let found = await ResidualFileScanner().scanResiduals(for: app(), homeDirectory: home.path)
+
+        #expect(found.contains { $0.path == path.path && $0.tier == .caution })
+    }
+
+    @Test("finds exact bundle-id Cookies and ByHost preferences")
+    func findsCookiesAndByHostPreferences() async throws {
+        let home = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(home) }
+        let cookie = home.appendingPathComponent("Library/Cookies/com.example.app.binarycookies")
+        let byHost = home.appendingPathComponent("Library/Preferences/ByHost/com.example.app.ABC123.plist")
+        try fm.createDirectory(at: cookie.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try fm.createDirectory(at: byHost.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try TestFixtures.writeFile(at: cookie, contents: "cookie")
+        try TestFixtures.writeFile(at: byHost, contents: "preference")
+
+        let found = await ResidualFileScanner().scanResiduals(for: app(), homeDirectory: home.path)
+
+        #expect(found.contains { $0.path == cookie.path && $0.tier == .caution })
+        #expect(found.contains { $0.path == byHost.path && $0.tier == .caution })
+    }
+
+    @Test("finds diagnostic reports by exact app-name prefix")
+    func findsDiagnosticReports() async throws {
+        let home = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(home) }
+        let report = home.appendingPathComponent("Library/Logs/DiagnosticReports/Example_2026-07-13.crash")
+        let similar = home.appendingPathComponent("Library/Logs/DiagnosticReports/ExampleHelper_2026-07-13.crash")
+        try fm.createDirectory(at: report.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try TestFixtures.writeFile(at: report, contents: "report")
+        try TestFixtures.writeFile(at: similar, contents: "keep")
+
+        let found = await ResidualFileScanner().scanResiduals(for: app(), homeDirectory: home.path)
+
+        #expect(found.contains { $0.path == report.path })
+        #expect(!found.contains { $0.path == similar.path })
+    }
+
+    @Test("finds a user LaunchAgent whose Program points inside the app bundle")
+    func findsLaunchAgentReferencingAppPath() async throws {
+        let home = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(home) }
+        let agent = home.appendingPathComponent("Library/LaunchAgents/com.vendor.unrelated-name.plist")
+        let plist: [String: Any] = ["ProgramArguments": ["/Applications/Example.app/Contents/MacOS/helper", "--background"]]
+        let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+        try fm.createDirectory(at: agent.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try data.write(to: agent)
+
+        let found = await ResidualFileScanner().scanResiduals(for: app(), homeDirectory: home.path)
+
+        #expect(found.contains { $0.path == agent.path })
+    }
 }

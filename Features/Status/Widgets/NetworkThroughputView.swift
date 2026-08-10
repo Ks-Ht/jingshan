@@ -15,11 +15,11 @@ struct NetworkThroughputView: View {
                 Text("网络")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+
             }
             HStack(alignment: .top, spacing: 20) {
-                directionColumn(icon: "arrow.down.circle.fill", label: "下载", tint: .blue, rate: network.downloadBytesPerSecond, history: downloadHistory)
-                directionColumn(icon: "arrow.up.circle.fill", label: "上传", tint: .green, rate: network.uploadBytesPerSecond, history: uploadHistory)
+                directionColumn(icon: "arrow.down.circle.fill", label: "下载", tint: InkPalette.coolCyan, rate: network.downloadBytesPerSecond, history: downloadHistory)
+                directionColumn(icon: "arrow.up.circle.fill", label: "上传", tint: InkPalette.accent, rate: network.uploadBytesPerSecond, history: uploadHistory)
             }
         }
         .bentoCard()

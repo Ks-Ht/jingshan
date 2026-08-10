@@ -259,3 +259,94 @@
 - **发布 v0.8.1**：`project.yml` 0.8.0→0.8.1（`CURRENT_PROJECT_VERSION` 2→3），`xcodegen`+Release 构建（harness 零符号），`ditto` 打包 `Jingshan-0.8.1.zip`（1.3 MB），`shasum` = `70cc55d0…db895`，`gh release create v0.8.1`（发到 kongshan-0924，带中文 release notes），更新 `Casks/jingshan.rb` version/sha256。
 - 发布页：https://github.com/kongshan-0924/jingshan/releases/tag/v0.8.1
 - **签名/权限痛点未解决**（用户暂缓）：ad-hoc 签名 → 每次更新仍需去系统设置删旧条目重加 FDA。免费根治方案备好（钥匙串建"代码签名"自签证书 + `project.yml` 用它签名），随时可做。
+
+## 续二十七（M27：全面审计 + 墨韵 Studio 设计 v2 + 修复清单）
+用户要求"全面审计 + 重构界面到专业设计师水准 + 看要加什么功能"。三个只读审计 agent 并行（安全正确性 / UX / 代码质量，中途因额度中断后 SendMessage 恢复完成）。
+- **审计结论**：安全契约（扫描→评审→确认→废纸篓+denylist 硬拦截）在全部路径成立，无 Critical；核心引擎分层获两路审计明确好评。真问题集中在 App 层。
+- **修复的真 bug**：①（质量 H1）五个模块清理后"自动重扫"是死代码——`defer isCleaning=false` 晚于 `startScan()` 的 guard → 清完列表仍显示已删项；修复为 `isCleaning=false → startScan() → lastSummary=summary`（顺序保证弹窗仍出现），五个 VM + emptyTrash 全改。②（质量 H2）删除循环把扫描测好的体积丢掉、在主线程同步重遍历整棵树（大目录转彩球）；五处 `engine.delete` 全部补 `precomputedSizeBytes`。③（安全 M1-M3+质量 H4）恢复功能加固：新建 `JingshanCore/History/CleanupRestore.swift`（`TrashedItem` 指纹 size+inode 防"同名换身"、trashPath 必须锚定在废纸篓内防篡改成任意搬移原语、可重试失败保留在 remaining、全部恢复才标已恢复），App store 委托之，**6 条新单测**（不覆盖占用目标/指纹不符拒搬/废纸篓外拒搬等）。④（安全 M4）`sizeAsync` 从 allObjects 物化全树改为 URL 流式枚举（可取消、单次元数据、跳符号链接不再把链接目标体积计入）。⑤（安全 L1）菜单栏采样随 `menuBarEnabled` didSet 起停（原先永不停止/中途开启不启动）。⑥（安全 L4）relaunch 仅在新实例成功启动后才退出。⑦（安全 L2）DeepCacheScanner 去掉与 `~/.cache` 整目录双计的 puppeteer 条目。⑧（安全 L3/质量 L3）Clean 扫描加代次 token，取消后迟到回调丢弃。
+- **UX 审计落地（专业设计师 Top10 大部分）**：根部 `.tint(品牌绿)`（WindowGroup/Settings）+ `ConfirmSheetShell` 增 `tint` 参数五处传模块色——**全 App 最重要的"确认清理"按钮不再系统蓝**；`SystemHealthTint` 语义化（墨绿/琥珀/墨红，阈值统一 70/90，首页概览条并入同一公式）；状态卡片图标/进程百分比/网络双色全部去系统色；`MetricSparkline` 红三角改随档位色；对比度提档（purge/status/amber 浅色加深，FDA 横幅主按钮改品牌绿）；清空废纸篓/清空记录 destructive 样式+后者补确认；勾选行整行可点+禁用变暗；分组展开改真 Button+hover；TriState/菜单栏/FDA 横幅补 VoiceOver；大文件专属诗句"重石移去，山自轻盈"；首页双按钮等宽；`.foregroundColor`→`.foregroundStyle`；中文标题去 `textCase(.uppercase)`；设置 section 头统一；死组件 ResultToast/SectionCard 删除；陈旧注释清理。
+- **设计系统 v2（墨韵 Studio）**：新 `InkTypography`（rounded 大数字/heroTitle/诗句字距）+ `InkElevation`（统一 inkCard：不透明卡面→先裁剪后双层柔影，深色用描边+亮面替代阴影；hoverLift）；深色改"墨夜"三层（#131418/#1E2025）；RingGauge 角向渐变描边+着色轨道+rounded 数字；山脊改双层（远淡近浓+纵向渐变）；首页 Hero 专属 `heroWashCard`（品牌绿渐变洗底+内嵌山影）；磁贴 hoverLift+17pt rounded 数值；`bentoCard`/`homeCard` 全部委托 inkCard——**浅/深双色离屏渲染逐屏确认**（home/status/heroes ×2）。
+- **快赢功能**：⌘1–⌘7 切换标签。
+- **验证**：**157/157 测试**；Debug/Release 构建通过；`nm` 零 harness 符号；14 张快照（含 3 张 dark）肉眼核对；重装 `/Applications/净山.app` 冒烟无 crash。**未提交未发版。**
+- **审计遗留（列给下一轮，未做）**：质量 H3 `CleanupExecutor` 五处循环收敛（行为已修，重构为后续）；卸载详情头 material 更换与图标阴影档位；UX (c)1 `ModulePageHeader` 组件化与未扫描空概览行；InkTypography 全量铺调用点；M4 扫描器"读不到≠没东西"错误态；A3 点卡片展开详情；命令面板 ⌘K/i18n/重复文件/定时提醒（提示词 B 项）。审计附注：安全 agent 为验证 FDA 探测器技术，对 TCC.db 做过一次只读 access() 探测（结果 NO，与探测器一致），无越权读取。
+
+## 2026-07-13 项目熟悉与验证
+- 已完成：阅读 README、交接/进度/下一步记录、项目配置、App 组合层、核心扫描/删除/恢复实现、测试清单与 Git 历史；核对当前 M27/v0.9.0 未提交工作树的范围。
+- 修改文件：仅本次四份项目记录；未修改产品代码。
+- 测试结果：`cd JingshanCore && swift test` 通过（157 tests / 30 suites / 0 failures）；`xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Debug build CODE_SIGNING_ALLOWED=NO` 成功；`git diff --check HEAD` 无输出。
+- 当前状态：正式发布最新版为 v0.8.1；本地为未提交、未发版的 v0.9.0/M27，包含安全/可靠性修复和墨韵 Studio UI v2。工作树已有用户/前序 Agent 的产品改动，本次未触碰。
+- 风险/注意事项：不要误将 Docker daemon 资源与宿主文件删除混用；普通文件删除必须继续经 DeletionEngine；v0.9.0 发版前仍需用户真机 UI 走查、Release 验证和签名/权限限制确认。
+- 下一步/交接：等待用户给出走查反馈或明确授权提交发布；继续开发前先读 HANDOFF、PROGRESS、NEXT_STEPS 与本条记录。
+
+## 2026-07-13 M28 全面审计与设计阶段
+
+- 已完成：对扫描器、清理/恢复流程、Docker 分流、五个 ViewModel、设计系统、现有离屏快照做代码审计；对比 Mole 当前公开实现及 Apple macOS HIG/可访问性要求。
+- 设计决策：用户确认保留水墨特色；扫描采用“已知可再生项正常清理，不确定项只提示且默认不选”；视觉选择 A“克制现代水墨”，其余局部选择授权 Agent 采用最优方案。
+- 当前发现：扫描错误与空结果混淆、浏览器/开发/AI 工具非标准缓存覆盖不足、Apple 缓存保护范围过粗、卸载残留位置偏少、部分扫描代次竞态、外置卷废纸篓恢复锚点不完整；UI 需统一页面骨架、结果状态、筛选与底部选择操作条。
+- 修改文件：仅视觉伴侣草图与本会话记录；尚未修改产品代码。
+- 测试结果：沿用本轮开始时的现场基线，157/157 核心测试与 Debug 构建通过；实现后需重新全量验证。
+- 当前状态：仍处于 brainstorming 设计硬门阶段，待最终设计确认后写 spec 和实施计划。
+- 下一步：展示最终首页/清理页结构，确认完整设计后进入文档与实现计划。
+
+### M28 设计规格收口
+
+- 已完成：把已确认的 A「克制现代水墨」方向、扫描/清理审计结论、安全边界、数据流、页面结构、可访问性和验收标准固化为正式设计规格，并完成模糊词、矛盾与范围自检。
+- 修改文件：新增 `docs/superpowers/specs/2026-07-13-jingshan-audit-scan-ui-design.md`；本条仅追加会话记录，未修改产品代码。
+- 测试结果：规格 `git diff --check` 通过；未发现 TBD/TODO/待定类占位；隔离提交 `78fb6c6` 仅包含规格文件，原有暂存删除和 M27 工作树改动未混入。
+- 当前状态：设计规格已提交，等待书面规格复核；尚未生成实施计划或开始 M28 产品代码实现。
+- 风险/注意事项：后续必须按测试先行分批实现；Apple 缓存豁免只能对白名单规则生效，Docker daemon 与宿主文件继续分流，建议检查项与强力模式不得默认勾选。
+- 下一步/交接：用户确认规格后调用 writing-plans 生成逐文件实施计划，再以内联方式按 TDD 执行并逐批验证。
+
+### M28.1 扫描可信度基础
+
+- 已完成：按 ponytail full 将规格压缩为复用现有 Scanner 的最小实施计划；`ScanCategory` 增加扫描问题，用户缓存/日志根目录存在但无法读取时不再伪装成正常空结果。
+- 修改文件：扫描类型与帮助器、UserCache/UserLog 扫描器、对应测试、M28 实施计划。
+- 测试结果：先验证新测试因缺少 `issues` 编译失败，再最小实现；`swift test --filter UserCacheScannerTests` 通过（5/5）。
+- 当前状态：Task 1 完成，进入已知安全缓存覆盖与 Apple 缓存保护修复。
+- 风险/注意事项：当前问题状态覆盖扫描根读取失败；深层枚举的逐文件权限错误仍保持 best-effort，不据此宣称完整覆盖。
+
+### M28.2 扫描、卸载与恢复闭环
+
+- 已完成：增加受约束的 Chrome/Edge/Arc Profile 缓存发现；仅对 Safari 已知缓存路径做最窄 Apple 保护豁免；排除通用扫描对 Docker 缓存的重复归属；补齐 Cookies、Application Scripts、ByHost、DiagnosticReports 与受限 LaunchAgent 残留；恢复引擎按源卷解析原生废纸篓并验证锚点；Purge/LargeFiles 加扫描代次，丢弃取消后的迟到结果。
+- 修改文件：`JingshanCore` 的 Scanning/Safety/Uninstaller/History 及对应测试，Purge/LargeFiles ViewModel。
+- 测试结果：各项均先写失败测试再最小实现；专项测试全部通过。
+- 当前状态：高价值缺口已闭环，删除仍统一经过 `DeletionEngine`，未增加第二套删除机制。
+- 风险/注意事项：深层逐文件权限失败仍为 best-effort；AI 模型、Group Containers、系统级残留没有自动清理；外置卷恢复依赖系统返回该源卷的用户废纸篓。
+- 下一步/交接：若真实用户反馈仍有漏扫，先收集具体路径与可再生证据，再增加精确规则，不做宽泛模糊匹配。
+
+### M28.3 清理页专业化与最终验证
+
+- 已完成：清理结果页新增搜索、全部/已选择/需检查/受保护筛选、扫描问题横幅与重试、准确空状态、底部选择摘要与“检查并清理”操作条；移除重复主操作；分组展开改为唯一 Button；复选控件补键盘/焦点语义；修正包含受保护项时的三态选择计算。保留山水 Hero、品牌绿和墨夜层次。
+- 修改文件：`CleanViewModel.swift`、`CleanView.swift`、`CleanGroupSectionView.swift`、`CategoryRow.swift`、`SnapshotHarness.swift`，以及 M28 规格/计划与四份项目记录。
+- 测试结果：`swift test` 通过（167 tests / 30 suites / 0 failures）；Debug 与 Release 构建成功；Release `nm` 检查无 SnapshotHarness/seedSnapshot/HomeSnapshotContent 符号；`git diff --check HEAD` 无错误。通过原生 App 实际执行只读扫描，走查“需检查”筛选、分组、选择状态和底部操作条，未执行任何删除。
+- 当前状态：M28 实现完成；Debug App 保留供用户走查；产品改动仍未提交、未发版，正式发布版本仍为 v0.8.1。
+- 风险/注意事项：当前机器运行时显示未授予完全磁盘访问权限，因此扫描可能不完整；ImageRenderer 对原生控件仍会产生占位色，最终视觉结论以原生 App 走查为准；项目没有 App 测试 target，扫描代次与 UI 状态目前依赖构建和手工走查。
+- 下一步/交接：用户满意后再单独整理产品提交并发布 v0.9.0；接手者先读 M28 规格、最小计划和本条记录，保留 `DeletionEngine` 单一路由，提交时排除 `.superpowers/` 与无关工作树改动。
+
+### 续二十九（2026-07-31：只读通读与总结）
+
+- 已完成：应用户要求通读代码与全部项目记录，产出项目总结。未改产品代码。
+- 修改文件：仅本文件及 HANDOFF/PROGRESS/NEXT_STEPS 的一条状态补记。
+- 测试结果：现场 `cd JingshanCore && swift test` = 167 tests / 30 suites / 0 failures。
+- 当前状态：已发布版仍为 v0.8.1（`ce5eb8d`）；工作树 v0.9.0（M27+M28）58 个文件改动、+1033/-337，未提交未发版；`Casks/jingshan.rb` 仍是 0.8.1（发版时需同步 version/sha256）。
+- 风险/注意事项：提交时排除 `.superpowers/`；核对 `SectionCard`/`ResultToast` 的暂存删除与新增 History/InkTypography/InkElevation 文件。
+- 下一步/交接：等用户真机走查 v0.9.0，获授权后按既有流程整理提交并发布。
+
+## 2026-08-01：项目深度阅读与现状复核
+
+- 已完成：通读 README、工程配置、接力记录、App/Features/JingshanCore 关键链路；核对扫描、删除、Docker、Purge、卸载、大文件、监控、历史恢复与权限流程。
+- 修改文件：仅更新 `docs/HANDOFF.md`、`docs/PROGRESS.md`、`docs/NEXT_STEPS.md`、`docs/progress/SESSION_LOG.md`，未改产品代码。
+- 测试结果：`swift test --scratch-path /private/tmp/jingshan-core-codex-019fb92e` 通过，167 tests / 30 suites / 0 failures；有 `String(cString:)` 弃用和测试 fixture 返回值未使用警告。
+- 当前状态：正式发布版仍为 v0.8.1；本地 `project.yml` 为 v0.9.0，M27+M28 产品改动未提交未发布。
+- 风险/注意事项：仓库原 `.build` 含旧路径 `/Users/kaysen/workspace/cleanmac` 的模块缓存，直接 `swift test` 会失败；工作树混有已暂存删除、未跟踪产品文件和 `.superpowers/` 草图，不得直接 `git add -A`。
+- 下一步：用户先走查 v0.9.0；获明确授权后再整理产品提交、同步 Cask 版本/sha256 并发布。
+- 接手方式：先读三份顶层记录，保留当前工作树；测试优先使用独立 scratch path，除非明确决定清理旧 `.build`。
+
+## 2026-08-10：v0.9.0 发布审计与发布
+
+- 用户明确授权检查、审计、修复、创建分支、合并推送并发布。以 `78fb6c6` + M27/M28 未提交工作树为基线创建 `codex/audit-release-v0.9.0`；保留并排除 `.superpowers/` 本地草图。
+- 安全审计确认并修复 3 项中等完整性问题：CleanupRestorer 的 Trash 祖先 symlink 逃逸；Docker VM disk 使用过期 liveness 结果；Docker image tag / volume name 在确认后可指向替换对象。恢复逃逸有修复前真实失败、修复后通过的隔离测试；Docker 修复经独立复核。
+- 数据安全/质量修复：受保护路径改成落盘成功后才更新内存，损坏配置时 fail closed 并提示；恢复失败不再显示“已恢复”；悬空 symlink 条目可恢复且不会被覆盖；清理了编译告警；README 补齐实际功能；Release 默认固定 arm64+x86_64 通用架构。
+- 验证：`swift test --scratch-path /private/tmp/jingshan-v090-dangling-tests` 为 174 tests / 30 suites / 0 failures；Debug 构建通过；通用 Release 构建通过；codesign 严格校验通过（ad-hoc）；版本 0.9.0/build 4；SnapshotHarness 符号不存在；结构化审计 JSON 通过 schema validator。
+- 发布资源：`Jingshan-0.9.0.zip`，2,566,994 bytes，SHA-256 `a22ce2ef6d5bb3804c3e2cae0e91f4a31f70ee271546a98b6c06f085b615ab27`；Cask 已同步。发布页：https://github.com/kongshan-0924/jingshan/releases/tag/v0.9.0
+- 已知剩余：Docker/文件系统状态检查无法与跨进程文件移动原子绑定；DockerCLI Pipe 大输出可能阻塞；App/SwiftUI 层仍缺独立 test target；正式 Developer ID 签名与公证仍未做。

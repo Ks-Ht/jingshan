@@ -53,9 +53,9 @@ public struct DockerResourceScanner: Sendable {
     /// dangling layers). Marked `.caution` and NOT default-selected:
     /// removing an image means re-pulling or rebuilding it if wanted again,
     /// and a locally-built-never-pushed image can't be recovered without its
-    /// Dockerfile + context. Removal uses `docker rmi <repo:tag>` WITHOUT
-    /// `-f`, so Docker itself refuses to remove any image still in use — an
-    /// authoritative safety backstop on top of the usage cross-reference.
+    /// Dockerfile + context. Removal uses the scan-time immutable image ID
+    /// WITHOUT `-f`, so a retargeted tag cannot redirect the action and Docker
+    /// still refuses to remove any image in use.
     public func scanUnusedTaggedImages() async -> [DockerCleanableItem] {
         guard let imagesOutput = try? await commandRunner.run(["images", "--format", "{{json .}}"], timeout: 15) else {
             return []
@@ -82,7 +82,12 @@ public struct DockerResourceScanner: Sendable {
                     risk: .caution,
                     riskNote: "该镜像当前未被任何容器使用。删除后如需再用要重新拉取或重新构建；本地构建且未推送到仓库的镜像删除后需要凭 Dockerfile 重新构建才能恢复。若镜像其实仍被某容器占用，Docker 会拒绝删除、不会误删。",
                     defaultSelected: false,
-                    removal: .dockerCommand(arguments: ["rmi", reference])
+                    // Bind removal to the immutable image ID captured during
+                    // scanning. A mutable repo:tag can be retargeted while
+                    // the confirmation sheet is open; deleting by ID then
+                    // fails safely if the old object vanished instead of
+                    // touching the newly tagged image.
+                    removal: .dockerCommand(arguments: ["rmi", raw.ID])
                 )
             )
         }
@@ -142,7 +147,15 @@ public struct DockerResourceScanner: Sendable {
         else {
             return []
         }
-        return Self.decodeNDJSON(output, as: RawVolume.self).map(Self.classify)
+        var items: [DockerCleanableItem] = []
+        for raw in Self.decodeNDJSON(output, as: RawVolume.self) {
+            let identityArguments = ["volume", "inspect", "--format", "{{.CreatedAt}}", raw.Name]
+            guard let createdAt = try? await commandRunner.run(identityArguments, timeout: 10),
+                  !createdAt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { continue }
+            items.append(Self.classify(raw, createdAt: createdAt))
+        }
+        return items
     }
 
     /// Custom networks not currently attached to any *running* container.
@@ -302,7 +315,7 @@ public struct DockerResourceScanner: Sendable {
         )
     }
 
-    private static func classify(_ raw: RawVolume) -> DockerCleanableItem {
+    private static func classify(_ raw: RawVolume, createdAt: String) -> DockerCleanableItem {
         DockerCleanableItem(
             id: "volume:\(raw.Name)",
             kind: .volume,
@@ -312,7 +325,11 @@ public struct DockerResourceScanner: Sendable {
             risk: .destructive,
             riskNote: "数据卷可能包含数据库或应用的持久化数据。删除后数据永久丢失且无法恢复，请确认卷内数据不再需要后再清理。",
             defaultSelected: false,
-            removal: .dockerCommand(arguments: ["volume", "rm", raw.Name])
+            removal: .verifiedDockerCommand(
+                preflightArguments: ["volume", "inspect", "--format", "{{.CreatedAt}}", raw.Name],
+                expectedOutput: createdAt.trimmingCharacters(in: .whitespacesAndNewlines),
+                arguments: ["volume", "rm", raw.Name]
+            )
         )
     }
 }

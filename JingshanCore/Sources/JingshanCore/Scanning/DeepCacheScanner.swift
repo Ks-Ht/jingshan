@@ -24,15 +24,18 @@ public struct DeepCacheScanner: CategoryScanning {
 
     public init(homeDirectory: String = NSHomeDirectory()) {
         self.locations = [
-            // Window-restore state — safe to clear, macOS rebuilds it.
-            Location(label: "已保存的应用窗口状态", path: homeDirectory + "/Library/Saved Application State"),
-            // Re-downloadable package-manager stores/caches, all outside ~/Library/Caches.
+            // Window-restore state — safe to clear, macOS rebuilds it; apps
+            // just won't restore their last-open windows once.
+            Location(label: "已保存的应用窗口状态（应用将不再恢复上次窗口）", path: homeDirectory + "/Library/Saved Application State"),
+            // Re-downloadable package-manager stores/caches, all outside
+            // ~/Library/Caches AND outside ~/.cache (DevToolCacheScanner
+            // already bills `~/.cache` wholesale — anything under it here
+            // would double-count).
             Location(label: "Yarn 缓存 (Berry)", path: homeDirectory + "/.yarn/cache"),
             Location(label: "pnpm store", path: homeDirectory + "/Library/pnpm/store"),
             Location(label: "Bun 缓存", path: homeDirectory + "/.bun/install/cache"),
             Location(label: "Go 模块下载缓存", path: homeDirectory + "/go/pkg/mod/cache/download"),
             Location(label: "CocoaPods 缓存", path: homeDirectory + "/.cocoapods/repos"),
-            Location(label: "Puppeteer 浏览器缓存", path: homeDirectory + "/.cache/puppeteer"),
         ]
     }
 

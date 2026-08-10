@@ -24,6 +24,7 @@ struct LargeFilesView: View {
                         .font(.callout)
                         .foregroundStyle(RiskTint.caution)
                 },
+                tint: InkPalette.coolCyan,
                 onConfirm: { permanently in
                     showingConfirmation = false
                     Task { await viewModel.performCleanup(permanently: permanently) }
@@ -107,7 +108,7 @@ struct LargeFilesView: View {
     @ViewBuilder
     private var header: some View {
         VStack(spacing: 16) {
-            HeroHeader(motif: .status, title: "大文件", tint: InkPalette.coolCyan) {
+            HeroHeader(motif: .largeFiles, title: "大文件", tint: InkPalette.coolCyan) {
                 HStack(spacing: 10) {
                     if viewModel.isScanning {
                         ProgressView().controlSize(.small)

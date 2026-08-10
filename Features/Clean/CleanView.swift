@@ -12,6 +12,11 @@ struct CleanView: View {
         // banner (and the first-run welcome), so this view no longer gates
         // itself — that avoided a doubled banner + onboarding on the Clean tab.
         scanContent
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if viewModel.hasScannedOnce, !viewModel.displayGroups.isEmpty {
+                selectionBar
+            }
+        }
         .navigationTitle("清理")
         .tint(InkPalette.cleanAccent) // module color for all controls here, not system blue
         .sheet(isPresented: $showingConfirmation) {
@@ -20,6 +25,7 @@ struct CleanView: View {
                 items: confirmItems,
                 totalSizeText: ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes),
                 extraAcknowledgment: { _ in EmptyView() },
+                tint: InkPalette.cleanAccent,
                 onConfirm: { permanently in
                     showingConfirmation = false
                     Task { await viewModel.performCleanup(permanently: permanently) }
@@ -62,7 +68,7 @@ struct CleanView: View {
         VStack(spacing: 0) {
             header
             Divider()
-            if viewModel.categories.isEmpty {
+            if viewModel.categories.isEmpty || (viewModel.isScanning && !hasAnyItems) {
                 if viewModel.isScanning {
                     ScanningStateView(statusText: "首次扫描可能需要一些时间…")
                         .padding(24)
@@ -76,13 +82,40 @@ struct CleanView: View {
                     )
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+            } else if !hasAnyItems {
+                EmptyStateView(
+                    systemImage: viewModel.scanIssues.isEmpty ? "checkmark.circle" : "exclamationmark.triangle",
+                    title: viewModel.scanIssues.isEmpty ? "没有发现可清理内容" : "扫描结果不完整",
+                    message: viewModel.scanIssues.first?.message ?? "当前范围内没有发现缓存或日志。",
+                    actionTitle: "重新扫描",
+                    action: { viewModel.startScan() }
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    ForEach(viewModel.displayGroups) { group in
-                        CleanGroupSectionView(group: group, viewModel: viewModel)
-                    }
-                    if let trash = viewModel.trashCategory, let item = trash.items.first {
-                        trashRow(item)
+                VStack(spacing: 0) {
+                    if !viewModel.scanIssues.isEmpty { scanIssueBanner }
+                    filterBar
+                    if viewModel.filteredDisplayGroups.isEmpty && !showsTrash {
+                        VStack(spacing: 8) {
+                            Image(systemName: "line.3.horizontal.decrease.circle")
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                            Text("没有符合筛选条件的项目")
+                                .font(.headline)
+                            Text("调整搜索词或切换筛选条件")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        List {
+                            ForEach(viewModel.filteredDisplayGroups) { group in
+                                CleanGroupSectionView(group: group, viewModel: viewModel)
+                            }
+                            if showsTrash, let trash = viewModel.trashCategory, let item = trash.items.first {
+                                trashRow(item)
+                            }
+                        }
                     }
                 }
             }
@@ -97,6 +130,77 @@ struct CleanView: View {
         viewModel.displayGroups.flatMap(\.items)
             .filter { viewModel.isSelected($0.item) }
             .map(CleanConfirmItem.init)
+    }
+
+    private var hasAnyItems: Bool {
+        viewModel.categories.contains { !$0.items.isEmpty }
+    }
+
+    private var showsTrash: Bool {
+        viewModel.listFilter == .all && viewModel.query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 12) {
+            TextField("搜索名称或路径", text: Binding(get: { viewModel.query }, set: { viewModel.query = $0 }))
+                .textFieldStyle(.roundedBorder)
+                .frame(minWidth: 180, maxWidth: 280)
+                .accessibilityLabel("搜索清理项目")
+            Picker("筛选", selection: Binding(get: { viewModel.listFilter }, set: { viewModel.listFilter = $0 })) {
+                ForEach(CleanListFilter.allCases) { filter in
+                    Text(filter.rawValue).tag(filter)
+                }
+            }
+            .pickerStyle(.segmented)
+            .frame(maxWidth: 390)
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(InkPalette.card.opacity(0.65))
+    }
+
+    private var scanIssueBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .foregroundStyle(RiskTint.caution)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("扫描完成，但结果可能不完整")
+                    .font(.subheadline.weight(.semibold))
+                Text(viewModel.scanIssues.first?.message ?? "部分区域无法读取")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("重试") { viewModel.startScan() }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(RiskTint.caution.opacity(0.08))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var selectionBar: some View {
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("已选择 \(viewModel.selectedItems.count) 项 · \(ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes))")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+                Label("默认移到废纸篓，可从清理历史恢复", systemImage: "trash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Button("检查并清理…") { showingConfirmation = true }
+                .buttonStyle(.borderedProminent)
+                .tint(InkPalette.cleanAccent)
+                .disabled(viewModel.selectedItems.isEmpty || viewModel.isScanning || viewModel.isCleaning)
+                .keyboardShortcut(.return, modifiers: [.command])
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .background(.regularMaterial)
+        .overlay(alignment: .top) { Divider() }
     }
 
     private func trashRow(_ item: ScannableItem) -> some View {
@@ -117,9 +221,11 @@ struct CleanView: View {
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
             }
-            Button("清空废纸篓") {
+            // The one truly irreversible bulk action on this page — styled so.
+            Button("清空废纸篓", role: .destructive) {
                 showingEmptyTrashConfirmation = true
             }
+            .tint(RiskTint.destructive)
             .disabled(viewModel.isCleaning || (item.sizeBytes ?? 0) == 0)
         }
         .padding(.vertical, 8)
@@ -127,9 +233,9 @@ struct CleanView: View {
 
     @ViewBuilder
     private var header: some View {
-        let reclaimable = viewModel.totalReclaimableBytes
+        let reclaimable = viewModel.safeReclaimableBytes
         let selected = viewModel.totalSelectedBytes
-        let fraction = reclaimable > 0 ? Double(selected) / Double(reclaimable) : 0
+        let fraction = reclaimable > 0 ? min(Double(selected) / Double(reclaimable), 1) : 0
 
         VStack(spacing: 16) {
             HeroHeader(motif: .clean, title: "清理", tint: InkPalette.cleanAccent) {
@@ -141,12 +247,6 @@ struct CleanView: View {
                         Button("开始扫描") { viewModel.startScan() }
                             .disabled(viewModel.isCleaning)
                     }
-                    Button("清理") {
-                        showingConfirmation = true
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(InkPalette.cleanAccent)
-                    .disabled(viewModel.selectedItems.isEmpty || viewModel.isScanning || viewModel.isCleaning)
                 }
             }
 
@@ -163,7 +263,7 @@ struct CleanView: View {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("已选中 \(Int(fraction * 100))%")
                             .font(.subheadline.weight(.semibold))
-                        Text("\(viewModel.displayGroups.count) 个分类可清理")
+                        Text(viewModel.scanIssues.isEmpty ? "\(viewModel.displayGroups.count) 个分类可清理" : "有 \(viewModel.scanIssues.count) 个区域未完整扫描")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

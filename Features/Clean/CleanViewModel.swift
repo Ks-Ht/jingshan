@@ -29,6 +29,15 @@ struct CleanDisplayGroup: Identifiable {
     }
 }
 
+enum CleanListFilter: String, CaseIterable, Identifiable {
+    case all = "全部"
+    case selected = "已选择"
+    case review = "需检查"
+    case protected = "已保护"
+
+    var id: Self { self }
+}
+
 @MainActor
 @Observable
 final class CleanViewModel {
@@ -47,6 +56,8 @@ final class CleanViewModel {
     private(set) var hasScannedOnce = false
     var selectedItemIDs: Set<String> = []
     var lastCleanupSummary: CleanupSummary?
+    var query = ""
+    var listFilter: CleanListFilter = .all
 
     /// Strong ("强力") mode: scans additional known-safe-but-edge locations.
     /// Default OFF. Critical safety property: while on, NOTHING is
@@ -73,6 +84,16 @@ final class CleanViewModel {
         selectedItems.reduce(0) { $0 + ($1.sizeBytes ?? 0) }
     }
 
+    var safeReclaimableBytes: Int64 {
+        displayGroups
+            .filter(\.group.defaultSelected)
+            .flatMap(\.items)
+            .filter { !$0.item.isProtected }
+            .reduce(0) { $0 + ($1.item.sizeBytes ?? 0) }
+    }
+
+    var scanIssues: [ScanIssue] { categories.flatMap(\.issues) }
+
     var trashCategory: ScanCategory? {
         categories.first { $0.id == Self.trashCategoryID }
     }
@@ -96,9 +117,37 @@ final class CleanViewModel {
             }
     }
 
+    var filteredDisplayGroups: [CleanDisplayGroup] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return displayGroups.compactMap { group in
+            let items = group.items.filter { classified in
+                let matchesFilter: Bool
+                switch listFilter {
+                case .all: matchesFilter = true
+                case .selected: matchesFilter = isSelected(classified.item)
+                case .review: matchesFilter = !group.group.defaultSelected
+                case .protected: matchesFilter = classified.item.isProtected
+                }
+                guard matchesFilter else { return false }
+                guard !needle.isEmpty else { return true }
+                return classified.displayName.lowercased().contains(needle)
+                    || classified.item.path.lowercased().contains(needle)
+            }
+            return items.isEmpty ? nil : CleanDisplayGroup(group: group.group, items: items)
+        }
+    }
+
+    /// Bumped on every start/cancel; late category callbacks from a
+    /// superseded scan carry a stale generation and are dropped, so a quick
+    /// cancel-then-rescan can't leak old (e.g. deep-mode) categories — or
+    /// their default selections — into the new scan's results.
+    private var scanGeneration = 0
+
     func startScan() {
         guard !isCleaning else { return }
         scanTask?.cancel()
+        scanGeneration += 1
+        let generation = scanGeneration
         categories = []
         selectedItemIDs = []
         lastCleanupSummary = nil
@@ -111,10 +160,11 @@ final class CleanViewModel {
                 // isolation, not MainActor — hop back explicitly before
                 // touching view-model state.
                 Task { @MainActor in
-                    self?.upsert(category)
+                    guard let self, self.scanGeneration == generation else { return }
+                    self.upsert(category)
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, scanGeneration == generation else { return }
             isScanning = false
             hasScannedOnce = true
         }
@@ -122,6 +172,7 @@ final class CleanViewModel {
 
     func cancelScan() {
         scanTask?.cancel()
+        scanGeneration += 1
         isScanning = false
     }
 
@@ -151,7 +202,6 @@ final class CleanViewModel {
     func performCleanup(permanently: Bool) async {
         guard !selectedItems.isEmpty, !isScanning, !isCleaning else { return }
         isCleaning = true
-        defer { isCleaning = false }
 
         let settings = AppSettings.shared
         let engine = settings.makeDeletionEngine()
@@ -164,7 +214,10 @@ final class CleanViewModel {
         var trashed: [TrashedItem] = []
 
         for item in selectedItems {
-            let outcome = engine.delete(path: item.path, mode: mode, associatedBundleIdentifier: item.ownerAppBundleID)
+            // Pass the scanner's measured size: without it the engine
+            // re-walks each directory synchronously ON the main actor just to
+            // annotate its log — multi-second beachballs on big caches.
+            let outcome = engine.delete(path: item.path, mode: mode, associatedBundleIdentifier: item.ownerAppBundleID, precomputedSizeBytes: item.sizeBytes)
             switch outcome {
             case .movedToTrash(_, let resultingURL, let size):
                 freed += size ?? 0
@@ -188,12 +241,19 @@ final class CleanViewModel {
             }
         }
 
-        lastCleanupSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
+        let summary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
         if !isDryRun {
             CleanupHistoryStore.shared.record(module: "清理", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
         }
         selectedItemIDs.removeAll()
+        // Order matters: `isCleaning` must drop BEFORE startScan() (whose
+        // guard would otherwise no-op — the old bug that left every list
+        // showing already-deleted items), and the summary must be assigned
+        // AFTER startScan() (which resets it to nil) so the completion alert
+        // still appears over the fresh scan.
+        isCleaning = false
         startScan()
+        lastCleanupSummary = summary
     }
 
     /// Empties Trash by permanently deleting its immediate contents —
@@ -202,7 +262,6 @@ final class CleanViewModel {
     func emptyTrash() async {
         guard let trashItem = trashCategory?.items.first, !isScanning, !isCleaning else { return }
         isCleaning = true
-        defer { isCleaning = false }
 
         let settings = AppSettings.shared
         let engine = settings.makeDeletionEngine()
@@ -227,8 +286,14 @@ final class CleanViewModel {
             }
         }
 
-        lastCleanupSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: 0, failedCount: failed, dryRun: isDryRun)
+        // Same ordering as performCleanup: un-block, rescan, then attach the
+        // summary after startScan()'s reset so the alert survives.
+        // (Deliberately NOT recorded in CleanupHistory: emptying the Trash is
+        // permanent by definition — nothing restorable to track.)
+        let summary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: 0, failedCount: failed, dryRun: isDryRun)
+        isCleaning = false
         startScan()
+        lastCleanupSummary = summary
     }
 
     private func upsert(_ category: ScanCategory) {
@@ -241,7 +306,7 @@ final class CleanViewModel {
             .filter { !settings.isExcluded(resolvedPath: $0.path) }
             .map { item in
                 var item = item
-                switch protectionEvaluator.evaluate(bundleIdentifier: item.ownerAppBundleID) {
+                switch protectionEvaluator.evaluate(bundleIdentifier: item.ownerAppBundleID, path: item.path) {
                 case .notProtected:
                     item.isProtected = false
                 case .staticallyProtected, .runningApp:
@@ -268,4 +333,13 @@ final class CleanViewModel {
             }
         }
     }
+
+#if DEBUG
+    func seedSnapshot(categories: [ScanCategory]) {
+        self.categories = []
+        selectedItemIDs = []
+        hasScannedOnce = true
+        categories.forEach(upsert)
+    }
+#endif
 }

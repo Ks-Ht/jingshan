@@ -11,6 +11,27 @@ public enum DockerCleanupOutcome: Sendable, Equatable {
     case failed(DockerCleanableItem, error: String)
 }
 
+public protocol DockerDiskSafetyChecking: Sendable {
+    func isSafeToRemoveDiskImage() async -> Bool
+}
+
+/// Re-checks both Docker Desktop and the daemon at the Docker-specific
+/// mutation choke point. A scan-time/UI-time result is not sufficient: the
+/// app or daemon may start while the confirmation sheet is open.
+public struct DefaultDockerDiskSafetyChecker: DockerDiskSafetyChecking {
+    private let availability: DockerAvailability
+
+    public init(commandRunner: DockerCommandRunning?) {
+        self.availability = DockerAvailability(commandRunner: commandRunner)
+    }
+
+    public func isSafeToRemoveDiskImage() async -> Bool {
+        let desktopRunning = await MainActor.run { DockerAvailability.isDockerDesktopRunning() }
+        guard !desktopRunning else { return false }
+        return await availability.checkStatus() != .available
+    }
+}
+
 /// The single choke point for removing any Docker-related item. Nothing
 /// else in the app invokes `docker rm`/`rmi`/`builder prune`/`volume rm`
 /// or deletes Docker host files directly — every removal goes through here.
@@ -25,15 +46,18 @@ public final class DockerCleanupEngine: @unchecked Sendable {
     private let commandRunner: DockerCommandRunning
     private let deletionEngine: DeletionEngineProtocol
     private let logger: DockerOperationLogging
+    private let diskSafetyChecker: DockerDiskSafetyChecking
 
     public init(
         commandRunner: DockerCommandRunning,
         deletionEngine: DeletionEngineProtocol = DeletionEngine(),
-        logger: DockerOperationLogging = DockerOperationLogger()
+        logger: DockerOperationLogging = DockerOperationLogger(),
+        diskSafetyChecker: DockerDiskSafetyChecking? = nil
     ) {
         self.commandRunner = commandRunner
         self.deletionEngine = deletionEngine
         self.logger = logger
+        self.diskSafetyChecker = diskSafetyChecker ?? DefaultDockerDiskSafetyChecker(commandRunner: commandRunner)
     }
 
     @discardableResult
@@ -41,8 +65,42 @@ public final class DockerCleanupEngine: @unchecked Sendable {
         switch item.removal {
         case .dockerCommand(let arguments):
             return await removeViaCommand(item, arguments: arguments, mode: mode)
+        case .verifiedDockerCommand(let preflightArguments, let expectedOutput, let arguments):
+            return await removeViaVerifiedCommand(
+                item,
+                preflightArguments: preflightArguments,
+                expectedOutput: expectedOutput,
+                arguments: arguments,
+                mode: mode
+            )
         case .filesystemPath(let path):
-            return removeViaFilesystem(item, path: path, mode: mode)
+            return await removeViaFilesystem(item, path: path, mode: mode)
+        }
+    }
+
+    private func removeViaVerifiedCommand(
+        _ item: DockerCleanableItem,
+        preflightArguments: [String],
+        expectedOutput: String,
+        arguments: [String],
+        mode: DockerCleanupMode
+    ) async -> DockerCleanupOutcome {
+        if mode == .dryRun {
+            record(item, outcome: "would_remove", detail: nil)
+            return .wouldRemove(item)
+        }
+        do {
+            let currentOutput = try await commandRunner.run(preflightArguments, timeout: 15)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let expected = expectedOutput.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard currentOutput == expected else {
+                record(item, outcome: "failed", detail: "resource_identity_changed")
+                return .failed(item, error: "资源在确认后已变化，请重新扫描并确认")
+            }
+            return await removeViaCommand(item, arguments: arguments, mode: mode)
+        } catch {
+            record(item, outcome: "failed", detail: "identity_check_failed: \(error)")
+            return .failed(item, error: "无法确认资源仍是扫描时的对象，请重新扫描")
         }
     }
 
@@ -61,7 +119,13 @@ public final class DockerCleanupEngine: @unchecked Sendable {
         }
     }
 
-    private func removeViaFilesystem(_ item: DockerCleanableItem, path: String, mode: DockerCleanupMode) -> DockerCleanupOutcome {
+    private func removeViaFilesystem(_ item: DockerCleanableItem, path: String, mode: DockerCleanupMode) async -> DockerCleanupOutcome {
+        if item.kind == .diskImage, mode == .real,
+           !(await diskSafetyChecker.isSafeToRemoveDiskImage())
+        {
+            record(item, outcome: "failed", detail: "docker_became_active")
+            return .failed(item, error: "Docker 已启动或正在启动，虚拟磁盘未清理；请退出 Docker 后重新扫描")
+        }
         let deletionMode: DeletionMode = (mode == .dryRun) ? .dryRun : .trash
         let outcome = deletionEngine.delete(
             path: path,

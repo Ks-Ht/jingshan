@@ -11,10 +11,15 @@ enum ScanningSupport {
         of directoryPath: String,
         excludedNames: Set<String> = [],
         ownerAppBundleID: (String) -> String? = { _ in nil }
-    ) async -> [ScannableItem] {
+    ) async -> (items: [ScannableItem], issues: [ScanIssue]) {
         let fileManager = FileManager.default
-        guard fileManager.fileExists(atPath: directoryPath) else { return [] }
-        guard let names = try? fileManager.contentsOfDirectory(atPath: directoryPath) else { return [] }
+        guard fileManager.fileExists(atPath: directoryPath) else { return ([], []) }
+        let names: [String]
+        do {
+            names = try fileManager.contentsOfDirectory(atPath: directoryPath)
+        } catch {
+            return ([], [ScanIssue(id: PathValidator.normalize(directoryPath), message: "无法读取此区域，扫描结果可能不完整")])
+        }
 
         var items: [ScannableItem] = []
         for name in names {
@@ -36,7 +41,7 @@ enum ScanningSupport {
                 )
             )
         }
-        return items
+        return (items, [])
     }
 
     /// A single aggregate item representing an entire directory (used for

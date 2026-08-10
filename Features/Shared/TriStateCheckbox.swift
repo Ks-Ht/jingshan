@@ -23,6 +23,8 @@ struct TriStateCheckbox: View {
                 .imageScale(.large)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel("全选本组")
+        .accessibilityValue(state == .on ? "已全选" : state == .partial ? "已选部分" : "未选择")
     }
 
     private var iconName: String {

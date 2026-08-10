@@ -44,6 +44,7 @@ struct DockerView: View {
                     )
                 },
                 extraAcknowledgmentSatisfied: { _ in !viewModel.hasDestructiveSelection || acknowledgedDestructive },
+                tint: InkPalette.dockerAccent,
                 onConfirm: { _ in
                     showingConfirmation = false
                     Task { await viewModel.performCleanup() }

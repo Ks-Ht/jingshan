@@ -53,15 +53,28 @@ struct RingGauge: View {
 
     var body: some View {
         ZStack {
+            // Tinted track (not neutral gray) so even an empty ring already
+            // carries the module's color identity.
             Circle()
-                .stroke(InkPalette.hairline, lineWidth: lineWidth)
+                .stroke(tint.opacity(0.13), lineWidth: lineWidth)
+            // The progress arc fades from a lighter head to the full tint at
+            // its tip — the gradient travels with the rotation, so the darkest
+            // point is always the leading edge.
             Circle()
                 .trim(from: 0, to: clampedProgress)
-                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [tint.opacity(0.45), tint]),
+                        center: .center,
+                        startAngle: .degrees(0),
+                        endAngle: .degrees(360 * max(clampedProgress, 0.001))
+                    ),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                )
                 .rotationEffect(.degrees(-90)) // trim starts at 3 o'clock; rotate so it starts at 12
             VStack(spacing: 2) {
                 Text(valueText)
-                    .font(.system(size: valueFontSize, weight: .bold))
+                    .font(.system(size: valueFontSize, weight: .bold, design: .rounded))
                     .monospacedDigit()
                     .contentTransition(.numericText())
                     .lineLimit(1)

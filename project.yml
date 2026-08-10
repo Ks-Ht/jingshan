@@ -14,6 +14,12 @@ settings:
     CODE_SIGNING_ALLOWED: "YES"
     ENABLE_HARDENED_RUNTIME: "NO"
     DEVELOPMENT_TEAM: ""
+  configs:
+    Release:
+      # Release assets are universal. Without this explicit setting,
+      # command-line builds targeting "My Mac" can silently emit arm64 only.
+      ARCHS: "arm64 x86_64"
+      ONLY_ACTIVE_ARCH: "NO"
 
 packages:
   JingshanCore:
@@ -40,7 +46,7 @@ targets:
         INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
         CODE_SIGN_ENTITLEMENTS: App/Jingshan.entitlements
         ENABLE_PREVIEWS: "YES"
-        MARKETING_VERSION: "0.8.1"
-        CURRENT_PROJECT_VERSION: "3"
+        MARKETING_VERSION: "0.9.0"
+        CURRENT_PROJECT_VERSION: "4"
     dependencies:
       - package: JingshanCore

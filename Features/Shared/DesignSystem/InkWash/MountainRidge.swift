@@ -9,10 +9,12 @@ import SwiftUI
 /// Two shapes share the same peak profile: `MountainRidge` (closed, for a
 /// faint fill) and `MountainRidgeLine` (open, for a crisp 1.5pt stroke of
 /// just the ridge — not the box edges a filled shape's stroke would trace).
-private let ridgeProfile: [CGFloat] = [0.66, 0.30, 0.52, 0.16, 0.46, 0.28, 0.58]
+private let nearRidgeProfile: [CGFloat] = [0.66, 0.30, 0.52, 0.16, 0.46, 0.28, 0.58]
+/// A second, gentler ridge sitting "behind" the near one — its peaks are
+/// deliberately out of phase so the two lines never merge visually.
+private let farRidgeProfile: [CGFloat] = [0.34, 0.52, 0.24, 0.44, 0.18, 0.50, 0.30]
 
-private func ridgePath(in rect: CGRect, closed: Bool) -> Path {
-    let ys = ridgeProfile
+private func ridgePath(_ ys: [CGFloat], in rect: CGRect, closed: Bool) -> Path {
     let n = ys.count
     var path = Path()
     let firstY = rect.minY + rect.height * ys[0]
@@ -38,26 +40,37 @@ private func ridgePath(in rect: CGRect, closed: Bool) -> Path {
 }
 
 struct MountainRidge: Shape {
-    func path(in rect: CGRect) -> Path { ridgePath(in: rect, closed: true) }
+    var profile: [CGFloat] = nearRidgeProfile
+    func path(in rect: CGRect) -> Path { ridgePath(profile, in: rect, closed: true) }
 }
 
 struct MountainRidgeLine: Shape {
-    func path(in rect: CGRect) -> Path { ridgePath(in: rect, closed: false) }
+    var profile: [CGFloat] = nearRidgeProfile
+    func path(in rect: CGRect) -> Path { ridgePath(profile, in: rect, closed: false) }
 }
 
-/// The composed silhouette used at the bottom of every hero: a faint filled
-/// ridge with a slightly stronger ridge line on top, in the module tint.
+/// The composed silhouette used at the bottom of every hero: two layered
+/// ridges — a paler far ridge behind a slightly stronger near one — giving
+/// the header quiet depth (远山淡, 近山浓), the classic ink-wash recession.
+/// Both fills stay whisper-faint so action buttons float on clean paper.
 struct MountainSilhouette: View {
     let tint: Color
     var height: CGFloat = 64
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            // Very faint fill (0.06) so action buttons read as floating on clean
-            // paper, not sitting on a colored band; the thin ridge line carries
-            // the shape.
-            MountainRidge().fill(tint.opacity(0.06))
-            MountainRidgeLine().stroke(tint.opacity(0.18), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
+            MountainRidge(profile: farRidgeProfile)
+                .fill(tint.opacity(0.05))
+                .frame(height: height * 0.82)
+            MountainRidge()
+                .fill(
+                    LinearGradient(
+                        colors: [tint.opacity(0.10), tint.opacity(0.04)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
+            MountainRidgeLine()
+                .stroke(tint.opacity(0.22), style: StrokeStyle(lineWidth: 1.5, lineJoin: .round))
         }
         .frame(height: height)
         .frame(maxWidth: .infinity)

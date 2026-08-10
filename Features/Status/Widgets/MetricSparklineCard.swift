@@ -25,12 +25,12 @@ struct MetricSparklineCard: View {
                 Text(title)
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+
                 if needsAttention {
                     Spacer()
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.caption)
-                        .foregroundStyle(RiskTint.destructive)
+                        .foregroundStyle(SystemHealthTint.forUsagePercent(percent))
                         .accessibilityLabel("需要关注") // the only icon here carrying state not otherwise in text
                 }
             }

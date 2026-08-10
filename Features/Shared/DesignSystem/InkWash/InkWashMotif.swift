@@ -11,6 +11,7 @@ enum InkWashMotif {
     case docker
     case purge
     case uninstaller
+    case largeFiles
     case status
 
     var poem: String {
@@ -19,6 +20,7 @@ enum InkWashMotif {
         case .docker: return "容器如云，聚散有时"
         case .purge: return "枯叶归尘，林自清明"
         case .uninstaller: return "移石拾遗，不留旧痕"
+        case .largeFiles: return "重石移去，山自轻盈"
         case .status: return "登高望远，万象有序"
         }
     }

@@ -43,4 +43,17 @@ struct ProtectionEvaluatorTests {
 
         #expect(evaluator.evaluate(bundleIdentifier: "com.example.App") == .notProtected)
     }
+
+    @Test("Safari 仅在明确缓存路径豁免静态保护")
+    func safariCacheBypassesStaticProtectionOnlyForCachePath() {
+        let protectedApps = ProtectedAppAllowlist(entries: [.init(bundleIdentifierPattern: "com.apple.*", reason: "test")])
+        let evaluator = ProtectionEvaluator(protectedApps: protectedApps, runningChecker: FakeRunningApplicationChecker())
+        let safariCache = NSHomeDirectory() + "/Library/Caches/com.apple.Safari"
+
+        #expect(evaluator.evaluate(bundleIdentifier: "com.apple.Safari", path: safariCache) == .notProtected)
+        guard case .staticallyProtected = evaluator.evaluate(bundleIdentifier: "com.apple.Safari", path: "/Applications/Safari.app") else {
+            Issue.record("Safari app must stay protected")
+            return
+        }
+    }
 }

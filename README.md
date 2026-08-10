@@ -10,9 +10,12 @@
 - **Docker 专项清理**：容器、镜像（悬空 + 未使用）、构建缓存、数据卷、未使用网络；Docker Desktop 完全退出时也能回收虚拟磁盘等宿主数据。
 - **构建产物清理（Purge）**：扫描 `node_modules`、`target`、`.build`、`vendor`、`.venv` 等常见构建产物目录，覆盖 Node/Rust/Java/Scala/Swift/Python/Go/Gradle/CocoaPods/Turborepo/Nuxt/Angular 等生态，靠"同级目录是否有项目标志文件"防止误判。
 - **应用卸载器**：卸载应用本体及其在系统各处留下的残留文件（缓存、偏好设置、登录启动项等），按风险分级，高风险项需二次确认。
-- **系统状态监控**：实时 CPU / 内存 / 磁盘 / 网络。
+- **大文件查找**：按用户选择的目录查找大文件和长期未访问文件，不默认勾选，删除仍进入废纸篓。
+- **清理历史与恢复**：本地记录每次清理及可恢复项目，可从废纸篓一键放回原位置；不会覆盖同名现有文件。
+- **系统状态监控**：实时 CPU / 内存 / 磁盘 / 网络、电池、每核心负载、系统信息与高占用进程，并可常驻菜单栏。
+- **安全设置**：全局预览模式（Dry Run）、受保护路径、构建产物扫描目录、菜单栏样式与完全磁盘访问状态。
 
-默认只勾选最常用、最安全的清理项；风险较高的项目（运行中的容器、数据卷、沙盒容器数据等）永远不会被默认选中。
+默认只勾选最常用、最安全的清理项；风险较高的项目（运行中的容器、数据卷、虚拟磁盘、用户自己的大文件等）永远不会被默认选中。强力模式只扩展到已知可再生成的位置，并且所有结果均不预选。
 
 ## 安装
 
@@ -63,7 +66,7 @@ xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Debug bui
 
 ## 数据安全
 
-删除操作只有一个入口（`DeletionEngine`），默认全部走废纸篓（可恢复），永久删除需要显式二次确认；每次操作都会记录到 `~/Library/Logs/Jingshan/operations.log`。详细的安全设计和历次审计记录见 `docs/HANDOFF.md`。
+主机文件删除只有一个入口（`DeletionEngine`），默认全部走废纸篓（可恢复），永久删除需要显式二次确认；Docker 运行时资源只通过 Docker CLI 处理，不把 VM 内路径当作 macOS 文件。每次操作都会记录到 `~/Library/Logs/Jingshan/operations.log`。详细的安全设计和历次审计记录见 `docs/HANDOFF.md`。
 
 ## License
 

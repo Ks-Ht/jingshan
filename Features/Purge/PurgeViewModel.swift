@@ -19,6 +19,7 @@ final class PurgeViewModel {
     var lastCleanupSummary: CleanupSummary?
 
     private var scanTask: Task<Void, Never>?
+    private var scanGeneration = 0
 
     var totalReclaimableBytes: Int64 {
         candidates.reduce(0) { $0 + ($1.sizeBytes ?? 0) }
@@ -39,6 +40,8 @@ final class PurgeViewModel {
     func startScan() {
         guard !isCleaning else { return }
         scanTask?.cancel()
+        scanGeneration += 1
+        let generation = scanGeneration
         candidates = []
         selectedIDs = []
         lastCleanupSummary = nil
@@ -55,12 +58,12 @@ final class PurgeViewModel {
             let scanner = PurgeScanner()
             let found = await scanner.scan(roots: roots) { progress in
                 Task { @MainActor in
-                    guard self.isScanning else { return }
+                    guard self.isScanning, self.scanGeneration == generation else { return }
                     self.scanningPath = progress.currentPath
                     self.liveFoundCount = progress.foundCount
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, scanGeneration == generation else { return }
             self.candidates = found.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
             // Recently-touched projects default OFF: an actively worked-on
             // project's build artifacts are a less clear-cut win to nuke
@@ -75,6 +78,7 @@ final class PurgeViewModel {
 
     func cancelScan() {
         scanTask?.cancel()
+        scanGeneration += 1
         scanningPath = nil
         isScanning = false
     }
@@ -94,7 +98,6 @@ final class PurgeViewModel {
     func performCleanup(permanently: Bool) async {
         guard !selectedCandidates.isEmpty, !isScanning, !isCleaning else { return }
         isCleaning = true
-        defer { isCleaning = false }
 
         let settings = AppSettings.shared
         let engine = settings.makeDeletionEngine()
@@ -108,7 +111,9 @@ final class PurgeViewModel {
         var trashed: [TrashedItem] = []
 
         for candidate in selectedCandidates {
-            let outcome = engine.delete(path: candidate.path, mode: mode)
+            // Scanner-measured size — avoids a synchronous main-actor re-walk
+            // of each artifact tree inside the engine's logging path.
+            let outcome = engine.delete(path: candidate.path, mode: mode, precomputedSizeBytes: candidate.sizeBytes)
             switch outcome {
             case .movedToTrash(_, let resultingURL, let size):
                 freed += size ?? 0
@@ -128,11 +133,15 @@ final class PurgeViewModel {
             }
         }
 
-        lastCleanupSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
+        let summary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
         if !isDryRun {
             CleanupHistoryStore.shared.record(module: "构建产物", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
         }
         selectedIDs.removeAll()
+        // Un-block BEFORE the rescan (its guard used to no-op — stale list
+        // bug), and re-attach the summary AFTER (startScan resets it).
+        isCleaning = false
         startScan()
+        lastCleanupSummary = summary
     }
 }

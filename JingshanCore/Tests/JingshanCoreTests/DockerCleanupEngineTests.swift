@@ -5,6 +5,10 @@ import Testing
 
 @Suite("DockerCleanupEngine")
 struct DockerCleanupEngineTests {
+    private struct StubDiskSafetyChecker: DockerDiskSafetyChecking {
+        let safe: Bool
+        func isSafeToRemoveDiskImage() async -> Bool { safe }
+    }
     private func makeCommandItem(
         id: String = "container:abc123",
         kind: DockerResourceKind = .container,
@@ -95,6 +99,74 @@ struct DockerCleanupEngineTests {
         #expect(failedEntry?.detail?.contains("being used") == true)
     }
 
+    @Test("verified command refuses removal when a mutable Docker name now points at a new object")
+    func verifiedCommandRefusesChangedIdentity() async {
+        let runner = FakeDockerCommandRunner()
+        let logger = InMemoryDockerOperationLogger()
+        let engine = DockerCleanupEngine(commandRunner: runner, logger: logger)
+        let check = ["volume", "inspect", "--format", "{{.CreatedAt}}", "db-data"]
+        let remove = ["volume", "rm", "db-data"]
+        let item = DockerCleanableItem(
+            id: "volume:db-data",
+            kind: .volume,
+            displayName: "db-data",
+            detail: "detail",
+            sizeBytes: nil,
+            risk: .destructive,
+            riskNote: "note",
+            defaultSelected: false,
+            removal: .verifiedDockerCommand(
+                preflightArguments: check,
+                expectedOutput: "2026-08-09T00:00:00Z",
+                arguments: remove
+            )
+        )
+        runner.setSuccess(for: check, output: "2026-08-10T00:00:00Z\n")
+
+        let outcome = await engine.remove(item, mode: .real)
+
+        guard case .failed = outcome else {
+            Issue.record("expected changed identity to fail, got \(outcome)")
+            return
+        }
+        #expect(runner.invokedArguments == [check])
+        #expect(!runner.invokedArguments.contains(remove))
+        #expect(logger.entries.contains { $0.detail == "resource_identity_changed" })
+    }
+
+    @Test("verified command fails closed when identity cannot be checked")
+    func verifiedCommandRefusesPreflightFailure() async {
+        let runner = FakeDockerCommandRunner()
+        let check = ["volume", "inspect", "--format", "{{.CreatedAt}}", "db-data"]
+        let remove = ["volume", "rm", "db-data"]
+        let item = DockerCleanableItem(
+            id: "volume:db-data",
+            kind: .volume,
+            displayName: "db-data",
+            detail: "detail",
+            sizeBytes: nil,
+            risk: .destructive,
+            riskNote: "note",
+            defaultSelected: false,
+            removal: .verifiedDockerCommand(
+                preflightArguments: check,
+                expectedOutput: "2026-08-09T00:00:00Z",
+                arguments: remove
+            )
+        )
+        runner.setFailure(for: check, error: DockerCommandError.timedOut)
+        let engine = DockerCleanupEngine(commandRunner: runner, logger: InMemoryDockerOperationLogger())
+
+        let outcome = await engine.remove(item, mode: .real)
+
+        guard case .failed = outcome else {
+            Issue.record("expected preflight failure to fail closed, got \(outcome)")
+            return
+        }
+        #expect(runner.invokedArguments == [check])
+        #expect(!runner.invokedArguments.contains(remove))
+    }
+
     @Test("logged entries carry the resource kind, id, and a docker-prefixed audit trail")
     func loggedEntriesCarryFullContext() async {
         let runner = FakeDockerCommandRunner()
@@ -126,7 +198,12 @@ struct DockerCleanupEngineTests {
             logger: InMemoryOperationLogger(),
             trashMover: FakeTrashMover(trashDirectory: scratch.appendingPathComponent("trash"))
         )
-        let engine = DockerCleanupEngine(commandRunner: runner, deletionEngine: deletionEngine, logger: logger)
+        let engine = DockerCleanupEngine(
+            commandRunner: runner,
+            deletionEngine: deletionEngine,
+            logger: logger,
+            diskSafetyChecker: StubDiskSafetyChecker(safe: true)
+        )
 
         let outcome = await engine.remove(makeFileItem(path: file.path), mode: .real)
 
@@ -140,6 +217,34 @@ struct DockerCleanupEngineTests {
         #expect(entry.arguments.first == "trash-file")
     }
 
+    @Test("disk image removal is refused when Docker becomes active after confirmation")
+    func diskImageRemovalRechecksLivenessImmediatelyBeforeMutation() async throws {
+        let scratch = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(scratch) }
+        let file = scratch.appendingPathComponent("Docker.raw")
+        try TestFixtures.writeFile(at: file, contents: "must survive")
+        let logger = InMemoryDockerOperationLogger()
+        let deletionEngine = DeletionEngine(
+            logger: InMemoryOperationLogger(),
+            trashMover: FakeTrashMover(trashDirectory: scratch.appendingPathComponent("trash"))
+        )
+        let engine = DockerCleanupEngine(
+            commandRunner: FakeDockerCommandRunner(),
+            deletionEngine: deletionEngine,
+            logger: logger,
+            diskSafetyChecker: StubDiskSafetyChecker(safe: false)
+        )
+
+        let outcome = await engine.remove(makeFileItem(path: file.path), mode: .real)
+
+        guard case .failed = outcome else {
+            Issue.record("expected active Docker to block disk removal, got \(outcome)")
+            return
+        }
+        #expect(FileManager.default.fileExists(atPath: file.path))
+        #expect(logger.entries.contains { $0.detail == "docker_became_active" })
+    }
+
     @Test("dry run on a host filesystem item never mutates the file")
     func filesystemItemDryRunDoesNotMutate() async throws {
         let scratch = try TestFixtures.makeScratchDirectory()
@@ -151,7 +256,12 @@ struct DockerCleanupEngineTests {
             logger: InMemoryOperationLogger(),
             trashMover: FakeTrashMover(trashDirectory: scratch.appendingPathComponent("trash"))
         )
-        let engine = DockerCleanupEngine(commandRunner: FakeDockerCommandRunner(), deletionEngine: deletionEngine, logger: InMemoryDockerOperationLogger())
+        let engine = DockerCleanupEngine(
+            commandRunner: FakeDockerCommandRunner(),
+            deletionEngine: deletionEngine,
+            logger: InMemoryDockerOperationLogger(),
+            diskSafetyChecker: StubDiskSafetyChecker(safe: true)
+        )
 
         let outcome = await engine.remove(makeFileItem(path: file.path), mode: .dryRun)
 
@@ -165,7 +275,12 @@ struct DockerCleanupEngineTests {
     @Test("a host filesystem item pointing at a critical system path is refused by the DeletionEngine")
     func filesystemItemRefusesCriticalPath() async {
         let deletionEngine = DeletionEngine(logger: InMemoryOperationLogger())
-        let engine = DockerCleanupEngine(commandRunner: FakeDockerCommandRunner(), deletionEngine: deletionEngine, logger: InMemoryDockerOperationLogger())
+        let engine = DockerCleanupEngine(
+            commandRunner: FakeDockerCommandRunner(),
+            deletionEngine: deletionEngine,
+            logger: InMemoryDockerOperationLogger(),
+            diskSafetyChecker: StubDiskSafetyChecker(safe: true)
+        )
 
         let outcome = await engine.remove(makeFileItem(path: "/System/Library"), mode: .real)
 
@@ -187,7 +302,12 @@ struct DockerCleanupEngineTests {
             logger: InMemoryOperationLogger(),
             trashMover: FakeTrashMover(trashDirectory: scratch.appendingPathComponent("trash"))
         )
-        let engine = DockerCleanupEngine(commandRunner: FakeDockerCommandRunner(), deletionEngine: deletionEngine, logger: InMemoryDockerOperationLogger())
+        let engine = DockerCleanupEngine(
+            commandRunner: FakeDockerCommandRunner(),
+            deletionEngine: deletionEngine,
+            logger: InMemoryDockerOperationLogger(),
+            diskSafetyChecker: StubDiskSafetyChecker(safe: true)
+        )
 
         let outcome = await engine.remove(makeFileItem(path: file.path), mode: .real)
 

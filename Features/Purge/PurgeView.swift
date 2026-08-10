@@ -20,6 +20,7 @@ struct PurgeView: View {
                 items: viewModel.selectedCandidates.map(PurgeConfirmItem.init),
                 totalSizeText: ByteFormatter.string(fromBytes: viewModel.totalSelectedBytes),
                 extraAcknowledgment: { _ in EmptyView() },
+                tint: InkPalette.purgeAccent,
                 onConfirm: { permanently in
                     showingConfirmation = false
                     Task { await viewModel.performCleanup(permanently: permanently) }
