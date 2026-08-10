@@ -108,7 +108,6 @@ final class UninstallerViewModel {
     func performUninstall(permanently: Bool) async {
         guard let app = selectedApp, canUninstallSelectedApp, !isUninstalling else { return }
         isUninstalling = true
-        defer { isUninstalling = false }
 
         let settings = AppSettings.shared
         let engine = settings.makeDeletionEngine()
@@ -146,42 +145,41 @@ final class UninstallerViewModel {
         // filesystem mutation — not just the earlier scan-time check, in
         // case the app was relaunched in between. Never overridable: an
         // uninstall must never force through a live app's own files.
-        apply(engine.delete(path: app.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier), originalPath: app.path)
+        apply(engine.delete(path: app.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier, precomputedSizeBytes: app.sizeBytes), originalPath: app.path)
 
-        // Docker Desktop's sandbox container (~/Library/Containers/com.docker.docker)
-        // isn't ordinary leftover data — it holds the entire VM disk backing
-        // every image/container/volume (multiple GB on a real machine). The
-        // generic destructive-tier checkbox this screen uses has no
-        // Docker-specific liveness awareness, unlike Docker's own cleanup
-        // module, which refuses to touch that same file unless BOTH the app
-        // is not running AND the daemon is unreachable. Mirror that same
-        // pair of checks here before letting this one bundle identifier's
-        // destructive-tier residuals through, so this generic screen can't
-        // become a second, weaker path to the exact danger the Docker
-        // module was built to prevent.
-        var dockerLikelyLive = false
-        if app.bundleIdentifier == "com.docker.docker" {
-            dockerLikelyLive = DockerAvailability.isDockerDesktopRunning()
-            if !dockerLikelyLive {
-                dockerLikelyLive = await DockerAvailability.makeDefault().checkStatus() == .available
-            }
+        // Docker Desktop's sandbox container holds the VM disk backing every
+        // image/container/volume. Use the same checker as Docker cleanup and
+        // run it for each destructive residual immediately before deletion;
+        // a single result cached before the loop leaves a wider restart race.
+        let dockerDiskSafetyChecker: DockerDiskSafetyChecking? = if app.bundleIdentifier == "com.docker.docker" {
+            DockerCLI.locate().map { DefaultDockerDiskSafetyChecker(commandRunner: DockerCLI(executablePath: $0)) }
+                ?? DefaultDockerDiskSafetyChecker(commandRunner: nil)
+        } else {
+            nil
         }
 
         for candidate in residualCandidates where selectedResidualIDs.contains(candidate.id) {
-            if candidate.tier == .destructive, dockerLikelyLive {
-                skipped += 1
-                continue
+            if candidate.tier == .destructive, !isDryRun, let dockerDiskSafetyChecker {
+                guard await dockerDiskSafetyChecker.isSafeToRemoveDiskImage() else {
+                    skipped += 1
+                    continue
+                }
             }
-            apply(engine.delete(path: candidate.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier), originalPath: candidate.path)
+            apply(engine.delete(path: candidate.path, mode: mode, associatedBundleIdentifier: app.bundleIdentifier, precomputedSizeBytes: candidate.sizeBytes), originalPath: candidate.path)
         }
 
-        lastUninstallSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
+        let summary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
         if !isDryRun {
             CleanupHistoryStore.shared.record(module: "卸载应用", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
         }
         selectedApp = nil
         residualCandidates = []
         selectedResidualIDs = []
+        // Un-block BEFORE the rescan (whose `!isUninstalling` guard used to
+        // no-op, leaving the just-uninstalled app in the list), and attach
+        // the summary AFTER startScan()'s reset so the alert still shows.
+        isUninstalling = false
         startScan()
+        lastUninstallSummary = summary
     }
 }

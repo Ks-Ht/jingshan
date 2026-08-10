@@ -37,4 +37,34 @@ struct BrowserCacheScannerTests {
 
         #expect(category.items.isEmpty)
     }
+
+    @Test("只发现 Chromium profile 中的已知缓存子目录")
+    func findsKnownChromiumProfileCaches() async throws {
+        let home = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(home) }
+        let profile = home.appendingPathComponent("Library/Application Support/Google/Chrome/Profile 1")
+        let codeCache = profile.appendingPathComponent("Code Cache")
+        try FileManager.default.createDirectory(at: codeCache, withIntermediateDirectories: true)
+        try TestFixtures.writeFile(at: codeCache.appendingPathComponent("compiled.js"), contents: "cache")
+        try TestFixtures.writeFile(at: profile.appendingPathComponent("History"), contents: "keep")
+
+        let category = await BrowserCacheScanner(homeDirectory: home.path).scan()
+
+        #expect(category.items.contains { $0.path == codeCache.path })
+        #expect(!category.items.contains { $0.path.hasSuffix("History") })
+    }
+
+    @Test("存在但无法读取的 Chromium 数据根会报告扫描问题")
+    func reportsUnreadableChromiumRoot() async throws {
+        let home = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(home) }
+        let root = home.appendingPathComponent("Library/Application Support/Google/Chrome")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: root.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path) }
+
+        let category = await BrowserCacheScanner(homeDirectory: home.path).scan()
+
+        #expect(!category.issues.isEmpty)
+    }
 }

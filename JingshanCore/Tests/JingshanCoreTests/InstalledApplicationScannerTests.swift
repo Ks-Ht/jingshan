@@ -37,7 +37,7 @@ struct InstalledApplicationScannerTests {
     func readsMetadataFromInfoPlist() async throws {
         let root = try TestFixtures.makeScratchDirectory()
         defer { TestFixtures.removeIfNeeded(root) }
-        try makeFixtureApp(in: root, named: "MyApp", bundleIdentifier: "com.example.myapp", displayName: "My App", version: "2.5.0")
+        _ = try makeFixtureApp(in: root, named: "MyApp", bundleIdentifier: "com.example.myapp", displayName: "My App", version: "2.5.0")
 
         let scanner = InstalledApplicationScanner()
         let found = await scanner.scan(roots: [root.path])
@@ -52,7 +52,7 @@ struct InstalledApplicationScannerTests {
     func fallsBackToFolderName() async throws {
         let root = try TestFixtures.makeScratchDirectory()
         defer { TestFixtures.removeIfNeeded(root) }
-        try makeFixtureApp(in: root, named: "NoDisplayName", bundleIdentifier: "com.example.nodisplayname", displayName: nil)
+        _ = try makeFixtureApp(in: root, named: "NoDisplayName", bundleIdentifier: "com.example.nodisplayname", displayName: nil)
 
         let scanner = InstalledApplicationScanner()
         let found = await scanner.scan(roots: [root.path])
@@ -64,7 +64,7 @@ struct InstalledApplicationScannerTests {
     func ignoresNonAppEntries() async throws {
         let root = try TestFixtures.makeScratchDirectory()
         defer { TestFixtures.removeIfNeeded(root) }
-        try makeFixtureApp(in: root, named: "RealApp", bundleIdentifier: "com.example.realapp")
+        _ = try makeFixtureApp(in: root, named: "RealApp", bundleIdentifier: "com.example.realapp")
         try fm.createDirectory(at: root.appendingPathComponent("Utilities"), withIntermediateDirectories: true)
         try fm.createDirectory(at: root.appendingPathComponent("Python 3.14"), withIntermediateDirectories: true)
 
@@ -92,9 +92,9 @@ struct InstalledApplicationScannerTests {
     func excludesProtectedApps() async throws {
         let root = try TestFixtures.makeScratchDirectory()
         defer { TestFixtures.removeIfNeeded(root) }
-        try makeFixtureApp(in: root, named: "SomeAppleTool", bundleIdentifier: "com.apple.someinternaltool")
-        try makeFixtureApp(in: root, named: "净山", bundleIdentifier: "net.kongshan.jingshan")
-        try makeFixtureApp(in: root, named: "RegularApp", bundleIdentifier: "com.example.regularapp")
+        _ = try makeFixtureApp(in: root, named: "SomeAppleTool", bundleIdentifier: "com.apple.someinternaltool")
+        _ = try makeFixtureApp(in: root, named: "净山", bundleIdentifier: "net.kongshan.jingshan")
+        _ = try makeFixtureApp(in: root, named: "RegularApp", bundleIdentifier: "com.example.regularapp")
 
         let scanner = InstalledApplicationScanner()
         let found = await scanner.scan(roots: [root.path])
@@ -114,7 +114,7 @@ struct InstalledApplicationScannerTests {
         // paths (`Library/Caches/<bundle id>`); if it were trusted verbatim
         // here, a value like this would make that path escape to `/etc`
         // before `PathValidator` ever gets a chance to reject it.
-        try makeFixtureApp(in: root, named: "Malicious", bundleIdentifier: "../../../etc")
+        _ = try makeFixtureApp(in: root, named: "Malicious", bundleIdentifier: "../../../etc")
 
         let scanner = InstalledApplicationScanner()
         let found = await scanner.scan(roots: [root.path])
@@ -126,7 +126,7 @@ struct InstalledApplicationScannerTests {
     func fallsBackWhenDisplayNameIsPathUnsafe() async throws {
         let root = try TestFixtures.makeScratchDirectory()
         defer { TestFixtures.removeIfNeeded(root) }
-        try makeFixtureApp(in: root, named: "WeirdName", bundleIdentifier: "com.example.weirdname", displayName: "../../../etc")
+        _ = try makeFixtureApp(in: root, named: "WeirdName", bundleIdentifier: "com.example.weirdname", displayName: "../../../etc")
 
         let scanner = InstalledApplicationScanner()
         let found = await scanner.scan(roots: [root.path])

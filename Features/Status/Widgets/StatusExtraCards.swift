@@ -46,7 +46,7 @@ struct PerCoreCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            header("每核心占用", systemImage: "cpu.fill", tint: .green)
+            header("每核心占用", systemImage: "cpu.fill", tint: InkPalette.statusAccent)
             if perCore.isEmpty {
                 Text("暂无数据").font(.caption).foregroundStyle(.secondary)
             } else {
@@ -82,7 +82,7 @@ struct TopProcessesCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            header("占用最高的进程", systemImage: "list.bullet.rectangle", tint: InkPalette.vermilion)
+            header("占用最高的进程", systemImage: "list.bullet.rectangle", tint: InkPalette.statusAccent)
             if rows.isEmpty {
                 Text("正在采集…").font(.caption).foregroundStyle(.secondary)
             } else {
@@ -109,6 +109,6 @@ struct TopProcessesCard: View {
 private func header(_ title: String, systemImage: String, tint: Color) -> some View {
     HStack(spacing: 6) {
         Image(systemName: systemImage).foregroundStyle(tint).accessibilityHidden(true)
-        Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary).textCase(.uppercase)
+        Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
     }
 }

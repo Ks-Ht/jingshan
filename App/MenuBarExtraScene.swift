@@ -40,11 +40,16 @@ struct MenuBarLabel: View {
     let showsPercent: Bool
 
     var body: some View {
-        if showsPercent, model.hasSample {
-            Text("\(Int(model.snapshot.cpu.totalUsagePercent.rounded()))%")
-        } else {
-            Image(systemName: "mountain.2.fill")
+        Group {
+            if showsPercent, model.hasSample {
+                Text("\(Int(model.snapshot.cpu.totalUsagePercent.rounded()))%")
+            } else {
+                Image(systemName: "mountain.2.fill")
+            }
         }
+        .accessibilityLabel(showsPercent && model.hasSample
+            ? "净山，CPU \(Int(model.snapshot.cpu.totalUsagePercent.rounded()))%"
+            : "净山")
     }
 }
 
@@ -62,9 +67,12 @@ struct MenuBarContentView: View {
             }
             Divider()
             if model.hasSample {
-                metricRow("CPU", model.snapshot.cpu.totalUsagePercent, .green)
-                metricRow("内存", model.snapshot.memory.usedPercent, InkPalette.amber)
-                metricRow("磁盘", model.snapshot.disk.usedPercent, InkPalette.coolCyan)
+                // Bars take the app-wide semantic health tint (fine → amber →
+                // red by load), never fixed decorative colors that would
+                // contradict the same numbers in the main window.
+                metricRow("CPU", model.snapshot.cpu.totalUsagePercent, SystemHealthTint.forUsagePercent(model.snapshot.cpu.totalUsagePercent))
+                metricRow("内存", model.snapshot.memory.usedPercent, SystemHealthTint.forUsagePercent(model.snapshot.memory.usedPercent))
+                metricRow("磁盘", model.snapshot.disk.usedPercent, SystemHealthTint.forUsagePercent(model.snapshot.disk.usedPercent))
                 if let battery = model.snapshot.battery, battery.isPresent {
                     HStack {
                         Text("电池").font(.caption).foregroundStyle(.secondary).frame(width: 34, alignment: .leading)
@@ -72,6 +80,7 @@ struct MenuBarContentView: View {
                         Text("\(battery.percentage)%\(battery.isCharging ? " · 充电中" : "")")
                             .font(.caption.weight(.semibold)).monospacedDigit()
                     }
+                    .accessibilityElement(children: .combine)
                 }
             } else {
                 Text("正在采集…").font(.caption).foregroundStyle(.secondary)
@@ -81,7 +90,7 @@ struct MenuBarContentView: View {
                 NSApp.activate(ignoringOtherApps: true)
                 openWindow(id: "main")
             } label: {
-                Label("打开净山", systemImage: "square.and.arrow.up.on.square")
+                Label("打开净山", systemImage: "macwindow")
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
@@ -110,5 +119,7 @@ struct MenuBarContentView: View {
                 .font(.caption.weight(.semibold)).monospacedDigit()
                 .frame(width: 38, alignment: .trailing)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label) \(Int(percent.rounded()))%")
     }
 }

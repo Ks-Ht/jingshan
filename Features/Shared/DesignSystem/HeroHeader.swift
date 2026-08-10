@@ -21,14 +21,15 @@ struct HeroHeader<Actions: View>: View {
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            MountainSilhouette(tint: tint, height: 60)
+            MountainSilhouette(tint: tint, height: 62)
 
             HStack(alignment: .center, spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(title)
-                        .font(.title2.bold())
+                        .font(InkType.heroTitle)
                     Text(motif.poem)
-                        .font(.subheadline)
+                        .font(InkType.poem)
+                        .tracking(1.5) // airy letterspacing sells the ink-poem line
                         .foregroundStyle(.secondary)
                 }
                 .accessibilityElement(children: .combine) // one "title, poem" element, not two swipe stops
@@ -41,7 +42,7 @@ struct HeroHeader<Actions: View>: View {
         }
         .frame(height: 88)
         .background(InkPalette.paper)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

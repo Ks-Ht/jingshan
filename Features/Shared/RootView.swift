@@ -53,6 +53,14 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
         }
+        // ⌘1…⌘7 jump straight to each tab (order matches the nav bar).
+        .background {
+            ForEach(Array(AppTab.allCases.enumerated()), id: \.element.id) { index, destination in
+                Button("") { open(destination) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+                    .hidden()
+            }
+        }
         .sheet(isPresented: $showingWelcome) {
             WelcomeSheet(
                 hasFullDiskAccess: hasFullDiskAccess,

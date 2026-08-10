@@ -39,14 +39,17 @@ extension NSColor {
 /// real look in dark mode, not as spec-derived values.
 enum InkPalette {
     static let ink = Color(light: NSColor(hex: 0x2B2B2E), dark: NSColor(hex: 0xEDEDEF))
-    /// Warm off-white page background (宣纸米白).
-    static let paper = Color(light: NSColor(hex: 0xFBFAF7), dark: NSColor(hex: 0x1A1B1E))
-    /// Card surface — a touch whiter than `paper` so cards lift off the page.
-    static let card = Color(light: NSColor(hex: 0xFFFFFF), dark: NSColor(hex: 0x242529))
-    static let hairline = Color(light: NSColor(hex: 0xE6E3DC), dark: NSColor(hex: 0x2E2F33))
+    /// Warm off-white page background (宣纸米白) / deep ink night (墨夜) —
+    /// dark mode goes properly deep so elevated cards have room to read as
+    /// lifted surfaces rather than near-identical grays.
+    static let paper = Color(light: NSColor(hex: 0xFBFAF7), dark: NSColor(hex: 0x131418))
+    /// Card surface — a touch whiter than `paper` in light, a clearly
+    /// elevated tier in dark.
+    static let card = Color(light: NSColor(hex: 0xFFFFFF), dark: NSColor(hex: 0x1E2025))
+    static let hairline = Color(light: NSColor(hex: 0xE6E3DC), dark: NSColor(hex: 0x2F3237))
     /// The recessed track behind the top-nav segmented pills (mole-style):
     /// the selected pill sits on top as a lighter capsule.
-    static let track = Color(light: NSColor(hex: 0xECEAE3), dark: NSColor(hex: 0x2A2B2F))
+    static let track = Color(light: NSColor(hex: 0xECEAE3), dark: NSColor(hex: 0x23252B))
 
     /// Brand/primary accent — the ink-green (松绿) that leads the whole app:
     /// top-nav selection, the home health-check hero, primary buttons.
@@ -56,15 +59,15 @@ enum InkPalette {
     /// same color, matching the reference design).
     static let cleanAccent = accent
     static let dockerAccent = Color(light: NSColor(hex: 0x4A6FA5), dark: NSColor(hex: 0x6B8DBE))
-    static let purgeAccent = Color(light: NSColor(hex: 0xB5713B), dark: NSColor(hex: 0xC98950))
+    static let purgeAccent = Color(light: NSColor(hex: 0x9A5F2A), dark: NSColor(hex: 0xC98950))
     static let uninstallerAccent = Color(light: NSColor(hex: 0xC0503F), dark: NSColor(hex: 0xD37058))
-    static let statusAccent = Color(light: NSColor(hex: 0xC69A34), dark: NSColor(hex: 0xDDB65A))
+    static let statusAccent = Color(light: NSColor(hex: 0x9C7A1E), dark: NSColor(hex: 0xDDB65A))
 
     /// A cool cyan (花青) used as the "healthy" tint for the disk usage bar on
     /// the home overview — distinct from CPU's green so the three bars read as
     /// three different metrics at a glance.
     static let coolCyan = Color(light: NSColor(hex: 0x3E7C8C), dark: NSColor(hex: 0x5A9AAA))
     /// Escalation tints for usage bars (amber 70–90%, vermilion ≥90%).
-    static let amber = Color(light: NSColor(hex: 0xC08A2E), dark: NSColor(hex: 0xD6A94E))
+    static let amber = Color(light: NSColor(hex: 0xA8761F), dark: NSColor(hex: 0xD6A94E))
     static let vermilion = uninstallerAccent
 }

@@ -174,7 +174,6 @@ final class DockerViewModel {
     func performCleanup() async {
         guard !selectedItems.isEmpty, !isScanning, !isCleaning else { return }
         isCleaning = true
-        defer { isCleaning = false }
 
         let settings = AppSettings.shared
         let commandRunner: DockerCommandRunning = DockerCLI.locate().map { DockerCLI(executablePath: $0) } ?? UnavailableDockerRunner()
@@ -187,25 +186,8 @@ final class DockerViewModel {
         var removed = 0
         var failed = 0
 
-        // Safety re-check for the single most destructive action: the VM
-        // disk is only offered when Docker is quit, but the user could have
-        // started it between the scan and now. Deleting the disk while its
-        // VM is live would corrupt it. Refuse unless BOTH the app is not
-        // running AND the daemon is unreachable — belt-and-suspenders, since
-        // the app-running check alone could miss a bundle-id variant.
-        var dockerActiveNow = DockerAvailability.isDockerDesktopRunning()
-        if !dockerActiveNow, selectedItems.contains(where: { $0.kind == .diskImage }) {
-            if await DockerAvailability.makeDefault().checkStatus() == .available {
-                dockerActiveNow = true
-            }
-        }
-
         let ordered = selectedItems.sorted { removalPriority($0.kind) < removalPriority($1.kind) }
         for item in ordered {
-            if item.kind == .diskImage && dockerActiveNow {
-                failed += 1
-                continue
-            }
             let outcome = await engine.remove(item, mode: mode)
             switch outcome {
             case .removed(_, let freedBytes):
@@ -220,9 +202,14 @@ final class DockerViewModel {
             }
         }
 
-        lastCleanupSummary = DockerCleanupSummary(freedBytes: freed, removedCount: removed, failedCount: failed, dryRun: mode == .dryRun)
+        let summary = DockerCleanupSummary(freedBytes: freed, removedCount: removed, failedCount: failed, dryRun: mode == .dryRun)
         selectedItemIDs.removeAll()
+        // Un-block BEFORE refresh() (whose guard used to no-op, leaving the
+        // list stale after cleanup), and attach the summary AFTER (refresh
+        // resets it) so the completion alert still shows.
+        isCleaning = false
         refresh()
+        lastCleanupSummary = summary
     }
 }
 

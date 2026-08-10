@@ -112,7 +112,7 @@ private struct HealthCheckHeroCard: View {
             ring
             VStack(alignment: .leading, spacing: 6) {
                 Text(titleText)
-                    .font(.title3.bold())
+                    .font(.system(size: 20, weight: .bold))
                 subtitle
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -132,14 +132,16 @@ private struct HealthCheckHeroCard: View {
 
                 // "前往清理" (not "立即清理") — this only navigates to the
                 // Clean page for manual selection; it must never read as an
-                // immediate one-click delete.
-                Button("前往清理") { onClean() }
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(.bordered)
+                // immediate one-click delete. The frame lives INSIDE the label
+                // so the button chrome stretches to match "一键体检" above.
+                Button { onClean() } label: {
+                    Text("前往清理").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
             }
             .frame(width: 130)
         }
-        .homeCard()
+        .heroWashCard()
     }
 
     @ViewBuilder private var ring: some View {
@@ -170,7 +172,7 @@ private struct HealthCheckHeroCard: View {
         }
         var text = Text("扫描到 ")
             + Text(ByteFormatter.string(fromBytes: cleanableBytes))
-                .foregroundColor(InkPalette.accent)
+                .foregroundStyle(InkPalette.accent)
                 .fontWeight(.semibold)
             + Text(" 可清理空间")
         if let lastCheckDate {
@@ -234,17 +236,18 @@ private struct ModuleTile: View {
             )
         }
         .buttonStyle(.plain)
+        .hoverLift()
         .onHover { isHovering = $0 }
         .accessibilityElement(children: .combine)
     }
 
-    // Main datum: 17px / medium / monospaced. Real values take the primary ink;
-    // the "待扫描"/"--" empty states are muted so they read as placeholders.
+    // Main datum: 17px rounded semibold, monospaced digits. Real values take
+    // the primary ink; "待扫描"/"--" empty states are muted placeholders.
     @ViewBuilder private var valueText: some View {
         switch value {
         case .data(let string):
             Text(string)
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 17, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .contentTransition(.numericText())
         case .pending:
@@ -253,7 +256,7 @@ private struct ModuleTile: View {
                 .foregroundStyle(.tertiary)
         case .placeholder:
             Text("--")
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 17, weight: .medium, design: .rounded))
                 .foregroundStyle(.tertiary)
         }
     }
@@ -289,11 +292,13 @@ private struct OverviewCell: View {
     let percent: Double?
     let base: Color
 
-    /// Escalates the base "healthy" tint to amber (70–90%) / vermilion (≥90%).
+    /// Escalates the base "healthy" tint through the app-wide semantic
+    /// thresholds (70% caution / 90% danger) — same pair `SystemHealthTint`
+    /// uses, so this bar and the health ring never disagree about a number.
     private var tint: Color {
         guard let percent else { return .secondary }
-        if percent >= 90 { return InkPalette.vermilion }
-        if percent >= 70 { return InkPalette.amber }
+        if percent >= 90 { return RiskTint.destructive }
+        if percent >= 70 { return RiskTint.caution }
         return base
     }
 
@@ -343,7 +348,7 @@ private struct CumulativeHistoryCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 (Text("累计已释放 ")
                     + Text(ByteFormatter.string(fromBytes: totalBytes))
-                        .foregroundColor(InkPalette.accent).fontWeight(.semibold)
+                        .foregroundStyle(InkPalette.accent).fontWeight(.semibold)
                     + Text(" · 共 \(count) 次清理"))
                     .font(.subheadline)
                     .monospacedDigit()
@@ -364,17 +369,33 @@ private struct CumulativeHistoryCard: View {
 // MARK: - Shared card chrome
 
 private extension View {
+    /// Home cards ride the app-wide elevated-card chrome.
     func homeCard() -> some View {
+        inkCard()
+    }
+
+    /// The health-check hero's signature chrome: the shared card surface with
+    /// a brand-green wash draining from the top-left and its own faint
+    /// mountain silhouette on the floor — the one card on the page allowed to
+    /// be atmospheric.
+    func heroWashCard() -> some View {
         self
-            .padding(16)
-            // Shadow lives on the background shape so it renders outside the
-            // card rather than being clipped by it.
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(alignment: .bottom) {
+                MountainSilhouette(tint: InkPalette.accent, height: 48)
+            }
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(InkPalette.card)
-                    .shadow(color: .black.opacity(0.05), radius: 3, y: 1)
+                LinearGradient(
+                    colors: [InkPalette.accent.opacity(0.10), InkPalette.accent.opacity(0.02)],
+                    startPoint: .topLeading, endPoint: .bottom
+                )
             )
-            .overlay(RoundedRectangle(cornerRadius: 12).stroke(InkPalette.hairline, lineWidth: 0.5))
+            .background(InkPalette.card)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(InkPalette.accent.opacity(0.14), lineWidth: 0.5))
+            .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
+            .shadow(color: .black.opacity(0.06), radius: 14, y: 6)
     }
 }
 

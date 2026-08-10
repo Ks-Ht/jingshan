@@ -42,16 +42,30 @@ public struct ScannableItem: Identifiable, Equatable, Sendable {
     }
 }
 
+/// A scan area that exists but could not be read completely. Missing optional
+/// cache locations are normal and do not create an issue.
+public struct ScanIssue: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let message: String
+
+    public init(id: String, message: String) {
+        self.id = id
+        self.message = message
+    }
+}
+
 /// One scan category's results, e.g. "user caches" or "browser caches".
 public struct ScanCategory: Identifiable, Equatable, Sendable {
     public let id: String
     public let displayName: String
     public var items: [ScannableItem]
+    public var issues: [ScanIssue]
 
-    public init(id: String, displayName: String, items: [ScannableItem]) {
+    public init(id: String, displayName: String, items: [ScannableItem], issues: [ScanIssue] = []) {
         self.id = id
         self.displayName = displayName
         self.items = items
+        self.issues = issues
     }
 
     public var totalSizeBytes: Int64 {

@@ -17,17 +17,18 @@ public struct UserCacheScanner: CategoryScanning {
         directoryPath: String = NSHomeDirectory() + "/Library/Caches",
         excludedNames: Set<String> = BrowserCacheScanner.topLevelCacheNamesToExcludeFromGenericScan
             .union(DevToolCacheScanner.topLevelCacheNamesToExcludeFromGenericScan)
+            .union(["com.docker.docker", "Docker Desktop"])
     ) {
         self.directoryPath = directoryPath
         self.excludedNames = excludedNames
     }
 
     public func scan() async -> ScanCategory {
-        let items = await ScanningSupport.scanImmediateChildren(
+        let result = await ScanningSupport.scanImmediateChildren(
             of: directoryPath,
             excludedNames: excludedNames,
             ownerAppBundleID: { ScanningSupport.looksLikeBundleIdentifier($0) ? $0 : nil }
         )
-        return ScanCategory(id: categoryID, displayName: displayName, items: items)
+        return ScanCategory(id: categoryID, displayName: displayName, items: result.items, issues: result.issues)
     }
 }

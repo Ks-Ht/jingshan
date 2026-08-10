@@ -113,6 +113,21 @@ public struct ResidualLocationRule: Sendable, Equatable {
             riskNote: "包含应用的个性化设置，删除后重新安装需要重新配置。"
         ),
         ResidualLocationRule(
+            relativeDirectory: "Library/Cookies",
+            matchKey: .bundleIdentifier,
+            pathSuffix: ".binarycookies",
+            displayLabel: "Cookie 数据",
+            tier: .caution,
+            riskNote: "可能包含登录状态，删除后重新安装可能需要重新登录。"
+        ),
+        ResidualLocationRule(
+            relativeDirectory: "Library/Application Scripts",
+            matchKey: .bundleIdentifier,
+            displayLabel: "应用脚本数据",
+            tier: .caution,
+            riskNote: "应用的沙盒脚本目录，删除后相关自动化或设置可能需要重建。"
+        ),
+        ResidualLocationRule(
             relativeDirectory: "Library/Application Support",
             matchKey: .bundleIdentifier,
             displayLabel: "支持文件",

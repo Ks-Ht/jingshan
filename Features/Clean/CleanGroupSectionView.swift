@@ -19,7 +19,7 @@ struct CleanGroupSectionView: View {
 
     private var selectionState: TriState {
         if selectedCount == 0 { return .off }
-        if selectedCount == totalCount { return .on }
+        if selectedCount == selectableItems.count { return .on }
         return .partial
     }
 
@@ -57,13 +57,22 @@ struct CleanGroupSectionView: View {
                 Text(ByteFormatter.string(fromBytes: group.totalBytes))
                     .foregroundStyle(.secondary)
 
-                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
+                // Real button (keyboard-reachable, hover feedback), not a bare
+                // tap gesture — expanding a group is a first-class action.
+                Button {
+                    isExpanded.toggle()
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundStyle(.secondary)
+                        .font(.caption)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(isExpanded ? "收起分组" : "展开分组")
             }
             .padding(.vertical, 8)
-            .contentShape(Rectangle())
-            .onTapGesture { isExpanded.toggle() }
+            .hoverHighlight()
 
             if isExpanded {
                 VStack(spacing: 0) {

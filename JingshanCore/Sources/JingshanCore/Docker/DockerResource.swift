@@ -81,6 +81,9 @@ public enum DockerResourceKind: String, Sendable, Codable, CaseIterable {
 /// VM-internal path such as a volume Mountpoint.
 public enum DockerRemovalMethod: Sendable, Equatable {
     case dockerCommand(arguments: [String])
+    /// A mutable Docker name must still identify the exact object seen
+    /// during scanning immediately before removal.
+    case verifiedDockerCommand(preflightArguments: [String], expectedOutput: String, arguments: [String])
     case filesystemPath(String)
 
     /// A stable, human-readable description of the action for the audit log.
@@ -88,6 +91,8 @@ public enum DockerRemovalMethod: Sendable, Equatable {
         switch self {
         case .dockerCommand(let arguments):
             return ["docker"] + arguments
+        case .verifiedDockerCommand(let preflightArguments, let expectedOutput, let arguments):
+            return ["docker-verify"] + preflightArguments + ["expected=\(expectedOutput)", "then", "docker"] + arguments
         case .filesystemPath(let path):
             return ["trash-file", path]
         }

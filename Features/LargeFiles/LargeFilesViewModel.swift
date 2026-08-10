@@ -18,6 +18,7 @@ final class LargeFilesViewModel {
     var scanRoot: String = LargeFileScanner.defaultRoot()
 
     private var scanTask: Task<Void, Never>?
+    private var scanGeneration = 0
 
     var totalBytes: Int64 { candidates.reduce(0) { $0 + $1.sizeBytes } }
     var oldCount: Int { candidates.filter(\.isOld).count }
@@ -32,6 +33,8 @@ final class LargeFilesViewModel {
     func startScan() {
         guard !isCleaning else { return }
         scanTask?.cancel()
+        scanGeneration += 1
+        let generation = scanGeneration
         candidates = []
         selectedIDs = []
         lastCleanupSummary = nil
@@ -44,12 +47,12 @@ final class LargeFilesViewModel {
             let scanner = LargeFileScanner()
             let found = await scanner.scan(root: root) { progress in
                 Task { @MainActor in
-                    guard self.isScanning else { return }
+                    guard self.isScanning, self.scanGeneration == generation else { return }
                     self.scanningPath = progress.currentPath
                     self.liveFoundCount = progress.foundCount
                 }
             }
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, scanGeneration == generation else { return }
             self.candidates = found
             // Deleting a user's own large files is high-stakes, so NOTHING is
             // pre-selected — every file must be ticked by hand.
@@ -62,6 +65,7 @@ final class LargeFilesViewModel {
 
     func cancelScan() {
         scanTask?.cancel()
+        scanGeneration += 1
         scanningPath = nil
         isScanning = false
     }
@@ -77,7 +81,6 @@ final class LargeFilesViewModel {
     func performCleanup(permanently: Bool) async {
         guard !selectedCandidates.isEmpty, !isScanning, !isCleaning else { return }
         isCleaning = true
-        defer { isCleaning = false }
 
         let settings = AppSettings.shared
         let engine = settings.makeDeletionEngine()
@@ -91,7 +94,7 @@ final class LargeFilesViewModel {
         var trashed: [TrashedItem] = []
 
         for candidate in selectedCandidates {
-            let outcome = engine.delete(path: candidate.path, mode: mode)
+            let outcome = engine.delete(path: candidate.path, mode: mode, precomputedSizeBytes: candidate.sizeBytes)
             switch outcome {
             case .movedToTrash(_, let resultingURL, let size):
                 freed += size ?? 0
@@ -111,11 +114,15 @@ final class LargeFilesViewModel {
             }
         }
 
-        lastCleanupSummary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
+        let summary = CleanupSummary(freedBytes: freed, deletedCount: deleted, skippedCount: skipped, failedCount: failed, dryRun: isDryRun)
         if !isDryRun {
             CleanupHistoryStore.shared.record(module: "大文件", freedBytes: freed, itemCount: deleted, trashedItems: trashed)
         }
         selectedIDs = []
+        // Un-block before the rescan (guard no-op bug), summary re-attached
+        // after startScan()'s reset so the alert still shows.
+        isCleaning = false
         startScan()
+        lastCleanupSummary = summary
     }
 }

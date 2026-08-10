@@ -82,6 +82,18 @@ struct UserCacheScannerTests {
         #expect(category.items.first?.path == otherFolder.path)
     }
 
+    @Test("default exclusion list leaves Docker Desktop caches to the Docker module")
+    func defaultExclusionListExcludesDockerOwnedFolders() async throws {
+        let scratch = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(scratch) }
+        try FileManager.default.createDirectory(at: scratch.appendingPathComponent("com.docker.docker"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: scratch.appendingPathComponent("Docker Desktop"), withIntermediateDirectories: true)
+
+        let category = await UserCacheScanner(directoryPath: scratch.path).scan()
+
+        #expect(category.items.isEmpty)
+    }
+
     @Test("returns an empty category when the directory does not exist")
     func emptyWhenMissing() async throws {
         let scratch = try TestFixtures.makeScratchDirectory()
@@ -92,5 +104,18 @@ struct UserCacheScannerTests {
         let category = await scanner.scan()
 
         #expect(category.items.isEmpty)
+    }
+
+    @Test("存在但无法列出的缓存目录会报告扫描问题")
+    func reportsUnreadableRoot() async throws {
+        let scratch = try TestFixtures.makeScratchDirectory()
+        defer { TestFixtures.removeIfNeeded(scratch) }
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: scratch.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scratch.path) }
+
+        let category = await UserCacheScanner(directoryPath: scratch.path, excludedNames: []).scan()
+
+        #expect(category.items.isEmpty)
+        #expect(!category.issues.isEmpty)
     }
 }

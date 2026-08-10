@@ -92,7 +92,7 @@ struct SettingsView: View {
 
             Section {
                 if settings.purgeScanPaths.isEmpty {
-                    Text("未配置。默认扫描 ~/Projects、~/GitHub、~/dev 中存在的目录。添加自定义目录后，只扫描你配置的目录。")
+                    Text("未配置。默认扫描 ~/workspace、~/Projects、~/Developer、~/GitHub、~/dev 中存在的目录。添加自定义目录后，只扫描你配置的目录。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -117,13 +117,23 @@ struct SettingsView: View {
                 }
             } header: {
                 Label("构建产物扫描目录", systemImage: "archivebox")
-                    .foregroundStyle(InkPalette.purgeAccent)
             }
         }
         .formStyle(.grouped)
         .frame(width: 480, height: 560)
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             hasFullDiskAccess = FullDiskAccessChecker.hasFullDiskAccess()
+        }
+        .alert(
+            "受保护路径配置异常",
+            isPresented: Binding(
+                get: { settings.exclusionPersistenceError != nil },
+                set: { if !$0 { settings.clearExclusionPersistenceError() } }
+            )
+        ) {
+            Button("好") { settings.clearExclusionPersistenceError() }
+        } message: {
+            Text(settings.exclusionPersistenceError ?? "未知错误")
         }
     }
 

@@ -15,13 +15,20 @@ enum PermissionActions {
 
     /// TCC caches an app's Full Disk Access grant at launch, so a grant made
     /// while 净山 is running only takes effect after a restart. This relaunches
-    /// a fresh instance and then quits the current one.
+    /// a fresh instance and quits the current one ONLY once the new instance
+    /// actually launched — if launching fails, staying alive beats silently
+    /// vanishing on the user.
     static func relaunch() {
         let url = Bundle.main.bundleURL
         let configuration = NSWorkspace.OpenConfiguration()
         configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration) { app, error in
+            DispatchQueue.main.async {
+                if app != nil, error == nil {
+                    NSApp.terminate(nil)
+                }
+                // On failure: keep running; the user can quit/reopen manually.
+            }
         }
     }
 }
@@ -45,9 +52,10 @@ struct FullDiskAccessBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 12)
+            // Brand-green CTA: white-on-gold failed contrast badly (~2.6:1).
             Button("打开系统设置") { PermissionActions.openFullDiskAccessSettings() }
                 .buttonStyle(.borderedProminent)
-                .tint(InkPalette.statusAccent)
+                .tint(InkPalette.accent)
             Button("已授权，重启") { PermissionActions.relaunch() }
                 .buttonStyle(.bordered)
                 .help("完全磁盘访问在启动时缓存，授权后需重启净山才能生效")
@@ -56,7 +64,8 @@ struct FullDiskAccessBanner: View {
         .padding(.vertical, 10)
         .background(InkPalette.statusAccent.opacity(0.08))
         .overlay(alignment: .bottom) { Divider() }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("净山尚未获得完全磁盘访问权限，扫描结果可能不准。可打开系统设置授权，授权后重启生效。")
+        // Deliberately NOT `.combine`: merging would swallow the two buttons
+        // into one un-focusable blob for VoiceOver. The texts carry the
+        // message; the buttons stay individually reachable.
     }
 }

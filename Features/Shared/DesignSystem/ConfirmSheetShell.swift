@@ -30,6 +30,11 @@ struct ConfirmSheetShell<Item: ConfirmSheetItem, ExtraAcknowledgment: View>: Vie
     /// e.g. Docker's destructive-tier toggle, Uninstaller's residual-tier
     /// toggle. Defaults to always-satisfied for modules with no extra gate.
     var extraAcknowledgmentSatisfied: (_ permanently: Bool) -> Bool = { _ in true }
+    /// Module accent for the confirm button. Sheets get a fresh environment,
+    /// so a `.tint` applied outside `.sheet {}` never reaches here — and the
+    /// old `.accentColor` fallback made the app's most consequential button
+    /// system-blue in every module.
+    var tint: Color = InkPalette.accent
     let onConfirm: (_ permanently: Bool) -> Void
     let onCancel: () -> Void
 
@@ -99,7 +104,7 @@ struct ConfirmSheetShell<Item: ConfirmSheetItem, ExtraAcknowledgment: View>: Vie
                     onConfirm(permanently)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(permanently ? RiskTint.irreversible : .accentColor)
+                .tint(permanently ? RiskTint.irreversible : tint)
                 .disabled(confirmDisabled)
             }
         }

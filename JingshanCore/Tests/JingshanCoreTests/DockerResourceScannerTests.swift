@@ -5,8 +5,10 @@ import Testing
 
 extension DockerRemovalMethod {
     var commandArguments: [String]? {
-        if case .dockerCommand(let args) = self { return args }
-        return nil
+        switch self {
+        case .dockerCommand(let args), .verifiedDockerCommand(_, _, let args): return args
+        case .filesystemPath: return nil
+        }
     }
 }
 
@@ -81,7 +83,7 @@ struct DockerResourceScannerTests {
         #expect(item.removal.commandArguments == ["rmi", "sha256:aaa111"])
     }
 
-    @Test("unused tagged images are caution, NOT default-selected, and removed by repo:tag without -f")
+    @Test("unused tagged images are caution, NOT default-selected, and removed by immutable image ID")
     func unusedTaggedImagesAreCautionNotDefault() async {
         let runner = FakeDockerCommandRunner()
         // Two tagged images; one (nginx:latest) is used by a container, the
@@ -107,7 +109,7 @@ struct DockerResourceScannerTests {
         #expect(item.risk == .caution)
         #expect(!item.defaultSelected)
         #expect(item.sizeBytes == 900_000_000)
-        #expect(item.removal.commandArguments == ["rmi", "oldapp:v1"])
+        #expect(item.removal.commandArguments == ["rmi", "sha256:bbb"])
     }
 
     @Test("imageIsUsed matches by repo:tag, by short id, and by used-ref prefix")
@@ -157,6 +159,10 @@ struct DockerResourceScannerTests {
             for: ["volume", "ls", "--filter", "dangling=true", "--format", "{{json .}}"],
             output: #"{"Name":"old-db-data","Driver":"local"}"#
         )
+        runner.setSuccess(
+            for: ["volume", "inspect", "--format", "{{.CreatedAt}}", "old-db-data"],
+            output: "2026-08-10T00:00:00Z\n"
+        )
         let scanner = DockerResourceScanner(commandRunner: runner)
 
         let items = await scanner.scanDanglingVolumes()
@@ -167,6 +173,13 @@ struct DockerResourceScannerTests {
         #expect(!item.defaultSelected)
         #expect(item.sizeBytes == nil)
         #expect(item.removal.commandArguments == ["volume", "rm", "old-db-data"])
+        guard case .verifiedDockerCommand(let preflight, let expected, let removal) = item.removal else {
+            Issue.record("expected a verified volume removal")
+            return
+        }
+        #expect(preflight == ["volume", "inspect", "--format", "{{.CreatedAt}}", "old-db-data"])
+        #expect(expected == "2026-08-10T00:00:00Z")
+        #expect(removal == ["volume", "rm", "old-db-data"])
     }
 
     @Test("a failing docker command degrades to an empty list rather than throwing")
@@ -202,6 +215,10 @@ struct DockerResourceScannerTests {
         runner.setSuccess(
             for: ["volume", "ls", "--filter", "dangling=true", "--format", "{{json .}}"],
             output: #"{"Name":"old-db-data","Driver":"local"}"#
+        )
+        runner.setSuccess(
+            for: ["volume", "inspect", "--format", "{{.CreatedAt}}", "old-db-data"],
+            output: "2026-08-10T00:00:00Z\n"
         )
         runner.setSuccess(
             for: ["network", "ls", "--filter", "type=custom", "--format", "{{json .}}"],

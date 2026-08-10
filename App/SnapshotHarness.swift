@@ -23,6 +23,15 @@ enum SnapshotHarness {
                 .fixedSize(horizontal: false, vertical: true),
             to: "\(dir)/home.png"
         )
+        // Dark ("墨夜") variant of the same layout — verifies the deep layered
+        // surfaces and that no hard-coded light color leaks through.
+        render(
+            HomeSnapshotContent()
+                .frame(width: 980)
+                .fixedSize(horizontal: false, vertical: true),
+            to: "\(dir)/home-dark.png",
+            scheme: .dark
+        )
         render(
             VStack(spacing: 0) {
                 TopNavBar(selection: .constant(.home))
@@ -36,7 +45,7 @@ enum SnapshotHarness {
         // A few Status Bento cards with sample data — to confirm the area-chart
         // overflow fix (the disk card's high-usage red area must stay inside
         // the rounded card, not bleed down).
-        render(
+        let statusGrid =
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 240), spacing: 14)], spacing: 14) {
                 // First card has no sparkline — verifies P2 bento bottom-align
                 // (it must stretch to its row-mates' height) and the P2 no-wrap
@@ -57,14 +66,54 @@ enum SnapshotHarness {
             }
             .padding()
             .frame(width: 780)
-            .background(InkPalette.paper),
-            to: "\(dir)/status.png"
+            .background(InkPalette.paper)
+        render(statusGrid, to: "\(dir)/status.png")
+        render(statusGrid, to: "\(dir)/status-dark.png", scheme: .dark)
+
+        let cleanModel = CleanViewModel()
+        cleanModel.seedSnapshot(categories: [
+            ScanCategory(
+                id: "browserCaches",
+                displayName: "浏览器缓存",
+                items: [
+                    ScannableItem(id: "/sample/chrome", path: "/sample/chrome", sizeBytes: 860_000_000, ownerAppBundleID: "com.google.Chrome", displayLabel: "Google Chrome · Default · Code Cache"),
+                ],
+                issues: [ScanIssue(id: "firefox", message: "无法读取 Firefox 数据，浏览器扫描不完整")]
+            ),
+            ScanCategory(
+                id: "devToolCaches",
+                displayName: "开发工具缓存",
+                items: [
+                    ScannableItem(id: "/sample/derived", path: "/sample/derived", sizeBytes: 3_400_000_000, displayLabel: "Xcode DerivedData"),
+                    ScannableItem(id: "/sample/npm", path: "/sample/npm", sizeBytes: 420_000_000, displayLabel: "npm 缓存"),
+                ]
+            ),
+            ScanCategory(
+                id: "userCaches",
+                displayName: "用户缓存",
+                items: [
+                    ScannableItem(id: "/sample/unknown", path: "/sample/unknown", sizeBytes: 72_000_000, displayLabel: "未识别来源"),
+                    ScannableItem(id: "/sample/apple", path: "/sample/apple", sizeBytes: 96_000_000, ownerAppBundleID: "com.apple.systemservice", displayLabel: "Apple 系统组件"),
+                ]
+            ),
+        ])
+        render(
+            CleanView(viewModel: cleanModel)
+                .frame(width: 920, height: 680)
+                .background(InkPalette.paper),
+            to: "\(dir)/clean-results.png"
+        )
+        render(
+            CleanView(viewModel: cleanModel)
+                .frame(width: 920, height: 680)
+                .background(InkPalette.paper),
+            to: "\(dir)/clean-results-dark.png",
+            scheme: .dark
         )
 
-        // Heroes — verify the refined ink-wash is one clean mountain
-        // silhouette (no blobs/dots/sun) and buttons use module colors (not
-        // system blue), with the tighter hero height.
-        render(
+        // Heroes — verify the refined ink-wash silhouettes (now two layered
+        // ridges) and module-colored buttons, in both schemes.
+        let heroesStack =
             VStack(spacing: 16) {
                 HeroHeader(motif: .clean, title: "清理", tint: InkPalette.cleanAccent) {
                     HStack(spacing: 10) {
@@ -88,9 +137,9 @@ enum SnapshotHarness {
             }
             .padding()
             .frame(width: 820)
-            .background(InkPalette.paper),
-            to: "\(dir)/heroes.png"
-        )
+            .background(InkPalette.paper)
+        render(heroesStack, to: "\(dir)/heroes.png")
+        render(heroesStack, to: "\(dir)/heroes-dark.png", scheme: .dark)
 
         // Purge page — verify the P0 empty-state copy (unconfigured vs
         // scanned-empty) and that its hero/buttons read cleanly.
@@ -173,15 +222,22 @@ enum SnapshotHarness {
     }
 
     @MainActor
-    private static func render(_ view: some View, to path: String) {
-        let renderer = ImageRenderer(content: view.environment(\.colorScheme, .light))
+    private static func render(_ view: some View, to path: String, scheme: ColorScheme = .light) {
+        let renderer = ImageRenderer(content: view.environment(\.colorScheme, scheme))
         renderer.scale = 2
-        guard let image = renderer.nsImage,
-              let tiff = image.tiffRepresentation,
-              let rep = NSBitmapImageRep(data: tiff),
-              let png = rep.representation(using: .png, properties: [:])
-        else { return }
-        try? png.write(to: URL(fileURLWithPath: path))
+        // InkPalette colors are dynamic NSColors resolved against the CURRENT
+        // NSAppearance (not the SwiftUI environment), so dark renders must
+        // draw inside a darkAqua drawing appearance or they'd come out light.
+        let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua) ?? NSAppearance.currentDrawing()
+        var png: Data?
+        appearance.performAsCurrentDrawingAppearance {
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff)
+            else { return }
+            png = rep.representation(using: .png, properties: [:])
+        }
+        try? png?.write(to: URL(fileURLWithPath: path))
     }
 }
 #endif

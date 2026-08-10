@@ -132,15 +132,23 @@ struct ModuleCheckboxToggleStyle: ToggleStyle {
     var isDisabled: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
-                .imageScale(.large)
-                .foregroundStyle(checkboxColor(isOn: configuration.isOn))
-                .contentShape(Rectangle())
-                .onTapGesture { if !isDisabled { configuration.isOn.toggle() } }
-                .accessibilityHidden(true) // the whole row carries a combined label
-            configuration.label
+        Button {
+            configuration.isOn.toggle()
+        } label: {
+            // The WHOLE row toggles, not just the tiny glyph; using a real
+            // Button keeps keyboard/focus behavior that a raw tap gesture lost.
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                    .imageScale(.large)
+                    .foregroundStyle(checkboxColor(isOn: configuration.isOn))
+                    .accessibilityHidden(true)
+                configuration.label
+                    .opacity(isDisabled ? 0.55 : 1)
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
     }
 
     private func checkboxColor(isOn: Bool) -> Color {

@@ -27,7 +27,7 @@ struct BatteryCard: View {
                 Text("电池")
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .textCase(.uppercase)
+
             }
             Text("\(battery.percentage)%")
                 .font(.title2.bold())

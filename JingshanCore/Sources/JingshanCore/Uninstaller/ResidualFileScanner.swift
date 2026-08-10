@@ -34,6 +34,12 @@ public struct ResidualFileScanner: Sendable {
             guard seenPaths.insert(candidate.path).inserted else { continue }
             results.append(candidate)
         }
+        for candidate in await scanByHostPreferences(for: app, homeDirectory: homeDirectory, fileManager: fileManager)
+            + scanDiagnosticReports(for: app, homeDirectory: homeDirectory, fileManager: fileManager)
+        {
+            guard seenPaths.insert(candidate.path).inserted else { continue }
+            results.append(candidate)
+        }
 
         return results
     }
@@ -69,8 +75,9 @@ public struct ResidualFileScanner: Sendable {
         let prefix = app.bundleIdentifier + "."
         var results: [ResidualCandidate] = []
         for entry in entries.sorted() {
-            guard entry.hasSuffix(".plist"), entry == exactMatch || entry.hasPrefix(prefix) else { continue }
+            guard entry.hasSuffix(".plist") else { continue }
             let path = directory + "/" + entry
+            guard entry == exactMatch || entry.hasPrefix(prefix) || launchAgent(at: path, references: app, fileManager: fileManager) else { continue }
             let size = await FileSizeCalculator.sizeAsync(ofPath: path)
             results.append(
                 ResidualCandidate(
@@ -79,6 +86,68 @@ public struct ResidualFileScanner: Sendable {
                     tier: .safe,
                     riskNote: "开机/登录自动启动的注册项，可安全删除；如果对应的后台程序当前正在运行，删除后不会立即停止，但下次登录不会再自动启动。",
                     sizeBytes: size
+                )
+            )
+        }
+        return results
+    }
+
+    private func launchAgent(at path: String, references app: InstalledApplication, fileManager: FileManager) -> Bool {
+        guard let data = fileManager.contents(atPath: path),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any]
+        else { return false }
+        let program = (plist["Program"] as? String).map { [$0] } ?? []
+        let arguments = plist["ProgramArguments"] as? [String] ?? []
+        let appPath = PathValidator.normalize(app.path)
+        return (program + arguments).contains {
+            let value = PathValidator.normalize($0)
+            return value == appPath || value.hasPrefix(appPath + "/")
+        }
+    }
+
+    private func scanByHostPreferences(for app: InstalledApplication, homeDirectory: String, fileManager: FileManager) async -> [ResidualCandidate] {
+        let directory = homeDirectory + "/Library/Preferences/ByHost"
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: directory) else { return [] }
+        return await candidates(
+            entries.filter { $0.hasPrefix(app.bundleIdentifier + ".") && $0.hasSuffix(".plist") },
+            directory: directory,
+            displayLabel: "设备偏好设置",
+            tier: .caution,
+            riskNote: "这台 Mac 专用的应用设置，删除后需要重新配置。"
+        )
+    }
+
+    private func scanDiagnosticReports(for app: InstalledApplication, homeDirectory: String, fileManager: FileManager) async -> [ResidualCandidate] {
+        let directory = homeDirectory + "/Library/Logs/DiagnosticReports"
+        guard let entries = try? fileManager.contentsOfDirectory(atPath: directory) else { return [] }
+        let suffixes: Set<String> = ["crash", "ips", "diag"]
+        return await candidates(
+            entries.filter { $0.hasPrefix(app.displayName + "_") && suffixes.contains(($0 as NSString).pathExtension.lowercased()) },
+            directory: directory,
+            displayLabel: "诊断报告",
+            tier: .safe,
+            riskNote: "崩溃与诊断报告，不包含应用工作数据。"
+        )
+    }
+
+    private func candidates(
+        _ entries: [String],
+        directory: String,
+        displayLabel: String,
+        tier: ResidualRiskTier,
+        riskNote: String
+    ) async -> [ResidualCandidate] {
+        var results: [ResidualCandidate] = []
+        for entry in entries.sorted() {
+            if Task.isCancelled { break }
+            let path = directory + "/" + entry
+            results.append(
+                ResidualCandidate(
+                    path: path,
+                    displayLabel: displayLabel,
+                    tier: tier,
+                    riskNote: riskNote,
+                    sizeBytes: await FileSizeCalculator.sizeAsync(ofPath: path)
                 )
             )
         }

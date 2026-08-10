@@ -1,7 +1,7 @@
 # HANDOFF
 
 ## 已完成什么
-净山（Jingshan）v0.8 是一个**可用的产品**：一款 Swift 原生、非沙盒的 macOS 清理与系统监控 App，已构建 Release 版本并安装到 `/Applications/净山.app`，用户机器上正在运行验证。**v0.8.0 已发布上线**（GitHub Release + Homebrew Cask，实测 `brew upgrade --cask` 从 0.7.0 升到 0.8.0 全链路通过）。**仓库已从 `Ks-Ht/jingshan` 迁移到 `https://github.com/kongshan-0924/jingshan`**（旧地址 GitHub 自动重定向；tap 名现在是 `kongshan-0924/jingshan`）。功能：垃圾/缓存清理（分组展示）、Docker 专项清理（宿主数据 + 运行时资源 + 未使用网络，Docker 停止时也能用）、项目构建产物清理（Purge，覆盖 Node/Rust/Java/Scala/Swift/Python/Go/Gradle/CocoaPods/Turborepo/Nuxt/Angular 等生态）、应用卸载器（Uninstaller，应用本体+残留文件含登录启动项，风险分级）、系统状态监控（Bento 仪表盘，含健康分/CPU/内存/磁盘/网络/电池 60 秒趋势图）、设置页（受保护路径 + 预览模式 + 构建产物扫描目录）。全局视觉已重做成"水墨山水"设计系统——每个模块一个水墨意象+原创诗句、统一 Hero 页头模板、修复了真机反馈的 RingGauge 裁切 bug、补齐了 VoiceOver/Reduce Motion/Dynamic Type 支持。项目已开源在 `https://github.com/Ks-Ht/jingshan`，支持 Homebrew Cask 一步安装。146 个单元测试全部通过。
+净山（Jingshan）是一款 Swift 原生、非沙盒的 macOS 清理与系统监控 App。**当前正式发布版为 v0.9.0（M27+M28 + 发布审计修复）。** 仓库在 `https://github.com/kongshan-0924/jingshan`。功能包括垃圾/缓存清理、Docker 专项清理、项目构建产物清理、应用卸载器、大文件查找、系统状态监控、清理历史/恢复、菜单栏与设置页。全局视觉保留“水墨山水”特色并升级为克制现代水墨；M28 将清理结果页补齐搜索、筛选、问题提示和底部选择操作条。核心测试现为 174 个全部通过。
 
 按里程碑：
 1. 调研阶段：阅读 https://github.com/tw93/mole 源码，梳理架构要点（见下）。
@@ -174,10 +174,21 @@ cd .. && xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration 
 
 **环境要求**：`xcode-select` 已切换到 `/Applications/Xcode.app/Contents/Developer`，`swift build`/`swift test`/`xcodebuild` 均可直接使用，无需 `DEVELOPER_DIR=` 前缀。`xcodegen`（2.45.4）已通过 Homebrew 安装，工程改动后需 `xcodegen generate` 重新生成 `.xcodeproj`（已 gitignore，不进仓库，`project.yml` 才是真源）。
 
-## 当前状态
-App 已构建、已安装、已验证可启动无崩溃。M19 完成 GitHub 开源 + Homebrew Cask 分发；M20 整体视觉重构成"水墨山水"设计系统 + 修复 RingGauge 裁切 bug + Status Bento 化 + 无障碍补齐；M21 换成顶部标签导航 + 新增首页 + 修面积图溢出；M22 修 Docker 稀疏文件误报/0 值文案/首页误删暗示；**M23 完整做完了 P0（构建产物扫描修复：目录选择器 + 实时进度 + 四态流程）、P1（水墨精细化：单条山形剪影 hero + 彻底去系统蓝）、P2（排版对齐：首页磁贴等高+概览三列、状态页副标题不换行+Bento 底对齐、卸载搜索框移入内容区、顶部"…"改真菜单），全部离屏渲染逐条确认，Release 已装到 `/Applications/净山.app`**。项目公开在 `https://github.com/Ks-Ht/jingshan`。
+## 当前状态（2026-08-10 更新，最重要，先读这段）
 
-**只有用户能在真机确认的部分**（离屏渲染看不到，因为 `ImageRenderer` 不渲染 `Menu`/`Picker`/`TextField` 这类交互控件，也没有真实窗口 chrome）：①`NSOpenPanel` 选目录的完整交互流程；②在真实项目目录上扫描时的实时进度反馈（"正在扫描 X · 已发现 N 项"是否真的跳动、不再"闪一下没反应"）；③卸载页新搜索框（`TextField`）、排序 `Picker`、顶部"…"`Menu` 在真实窗口里的渲染与交互（离屏渲染里它们都显示成黄色占位图标，是渲染器限制，不是坏图标——这些控件本就在真机正常工作）；④卸载列表自定义选中态（accent 竖条+软底）的 hover/键盘观感；⑤真实窗口 chrome（交通灯避让、毛玻璃、切标签动画）。**界面点击走查依然做不到**（缺 Accessibility/Screen Recording 权限）。**M20–M23 已发布 v0.8.0**（`brew upgrade` 实测通过）。**M24（全局 FDA 引导 + 首启欢迎 + 打开废纸篓入口 + 体积改实际占用 + hero 打磨）已完成、装机冒烟通过，但尚未提交、未发版**——等用户确认后发 0.8.1。M24 只有用户能真机确认的部分：首启欢迎/FDA 横幅在真实窗口的观感、"打开系统设置"深链是否落到"完全磁盘访问"面板、"授权后重启"是否正常重启、设置页权限区。
+**最新版本是 `v0.9.0`。** M27+M28 产品、测试、必要文档与发布审计修复已经整理到 `codex/audit-release-v0.9.0`，合并到 `main` 并推送；`.superpowers/` 本地草图未纳入提交。发布资源是 arm64+x86_64 通用 App，ZIP SHA-256 为 `a22ce2ef6d5bb3804c3e2cae0e91f4a31f70ee271546a98b6c06f085b615ab27`。
+
+**版本脉络**：v0.7.0（M19 首发）→ v0.8.0（M20–M23 水墨重构/导航/首页）→ v0.8.1（M24–M26：FDA 引导/强力模式/清理历史+恢复/大文件/菜单栏/监控扩展）→ **v0.9.0（M27+M28 + 发布审计）**。
+
+**M27 干了什么**（本轮，未提交）：三路只读子 agent 审计（安全正确性 / UX / 代码质量，中途因额度中断用 SendMessage 恢复完成）→ 修审计发现 + 「墨韵 Studio」设计系统 v2。审计结论：删除安全契约（扫描→评审→勾选→移废纸篓 + 受保护路径硬拦截）在所有路径成立，无 Critical，核心引擎分层被两路审计点赞。**修掉的真 bug**：①五个模块清理后"自动重扫"是死代码（`defer isCleaning=false` 晚于 `startScan()` 的 guard → 清完列表仍显示已删项，卸载完 App 还在列表）——五个 VM + emptyTrash 全改为 `isCleaning=false → startScan() → lastSummary=summary`（顺序保证弹窗仍出现）；②删除循环把扫描测好的体积丢掉在主线程重遍历整树（大目录卡死）——五处 `engine.delete` 补 `precomputedSizeBytes: item.sizeBytes`；③恢复功能加固：新建 `JingshanCore/History/CleanupRestore.swift`（`TrashedItem` 指纹 size+inode 防同名换身、trashPath 必须锚定在废纸篓内、失败项保留 remaining 可重试、全部恢复才标 restored），App 层 `CleanupHistoryStore.restore` 委托它，**6 条新单测**；④`sizeAsync` 改 URL 流式枚举（可取消、跳符号链接不虚计目标体积）；⑤菜单栏采样随 `menuBarEnabled` 起停；⑥relaunch 仅新实例成功才退出；⑦Deep 去掉与 `~/.cache` 双计的 puppeteer；⑧Clean 扫描加代次 token 丢弃取消后迟到回调。**UX 落地**：根部 `.tint(品牌绿)` + `ConfirmSheetShell` 加 `tint` 参数（**全 App 最重要的"确认清理"按钮之前一直是系统蓝——sheet 不继承外部 tint**）；`SystemHealthTint` 语义化（墨绿/琥珀/墨红，阈值统一 70/90，首页概览条并入同公式）；对比度提档（purge/status/amber 浅色加深）；清空废纸篓/清空记录 destructive+确认；勾选整行可点+禁用变暗；分组头改真 Button；补 VoiceOver；死组件 ResultToast/SectionCard 删除。**设计 v2**：新 `InkTypography`（圆体大数字/字距）+ `InkElevation`（统一 `inkCard`：不透明卡面→先裁剪后双层柔影，深色用亮面描边替代阴影；`hoverLift`）；深色改真"墨夜"三层（paper #131418 / card #1E2025）；RingGauge 角向渐变+着色轨道+圆体数字；山脊改双层（远淡近浓）；首页 Hero 专属 `heroWashCard`（品牌绿渐变洗底+内嵌山影）；`bentoCard`/`homeCard` 全委托 `inkCard`。**快赢**：⌘1–⌘7 切标签。**验证**：157 测试全绿、Debug/Release 构建通过、`nm` 零 harness 符号、14 张浅/深双色快照肉眼核对、装机冒烟无 crash。
+
+**M28 干了什么**（本轮，产品代码未提交）：扫描器增加显式问题态；Chrome/Edge/Arc 只扫描 `Default`/`Profile *` 下的已知缓存目录；Safari 仅在两个已知缓存根获得最窄 Apple 保护豁免；Docker 缓存从通用缓存归属中排除；卸载残留补 Cookies/Application Scripts/ByHost/DiagnosticReports/受限 LaunchAgent；恢复按源卷解析废纸篓并验证锚点；Purge/LargeFiles 增扫描代次；清理结果页补搜索、筛选、问题横幅、准确空态和底部选择操作条。原生 Debug App 已实际完成只读扫描和“需检查”筛选走查，未执行删除。最终验证为 **167 tests / 30 suites / 0 failures**，Debug/Release 构建成功，Release 无 harness 符号。
+
+**Ponytail 明确暂缓**：不抽 `CleanupExecutor`、不加共享指标总线、不建新扫描 DSL；AI 模型、Group Containers、系统级残留也不自动清理。只有出现重复行为分叉、可测性能问题或具体安全规则证据时才追加。
+
+**仍需用户真机确认的部分**：`ImageRenderer` 不渲染 `Menu`/`Picker`/`TextField`（离屏显示黄色占位）；本轮已通过 Computer Use 检查原生窗口、清理扫描、筛选、分组和选择状态，但深色“墨夜”的长期观感、最大辅助字号、强力模式/大文件真实目录的删除与恢复仍需用户谨慎走查。当前运行时显示未授予完全磁盘访问权限，因此本次扫描结果不能代表完整覆盖。
+
+**未解决的痛点（用户已知、暂缓）**：ad-hoc 签名导致每次更新 App 都要去系统设置删掉旧「完全磁盘访问」条目重加（cdhash 每次变 → TCC 认成新 App，光开关无效）。免费根治方案已想好：钥匙串建一张"代码签名"自签证书 + `project.yml` 改用它签名，之后同一证书签的更新保留授权。用户说"签名先不考虑"。
 
 ## M20 安全审计发现（已全部处理）
 这一轮改动几乎全是视觉层重构，但四个删除流程的确认弹窗全部换了实现（迁移到共享的 `ConfirmSheetShell`），"换皮时不小心削弱了风险确认门槛"是比"引入新删除漏洞"更现实的风险，因此专门做了一轮聚焦审计，而不是走完整的通用安全审计流程（因为大部分改动根本不涉及删除逻辑本身）。
@@ -259,7 +270,8 @@ App 已构建、已安装、已验证可启动无崩溃。M19 完成 GitHub 开�
 - （M20 新增）电池监控只在有电池的 Mac 上显示卡片（`BatterySnapshot.isPresent`），桌面 Mac（Mac mini/Mac Studio/iMac）不会看到这张卡，这是有意为之不是 bug。GPU/温度/风扇监控不存在（见风险清单第 15 条）。
 
 ## 下一步该做什么（如果继续迭代）
-0. **（M19）如果要发新版本**：改 `project.yml` 的 `MARKETING_VERSION` → Release 构建 → `ditto -c -k --sequesterRsrc --keepParent 净山.app Jingshan-<version>.zip` → `shasum -a 256` 算新摘要 → `gh release create v<version> <zip>` → 更新 `Casks/jingshan.rb` 的 `version`/`sha256`（`url` 会随 `#{version}` 插值自动跟着变，不用手改）→ commit+push → 本地 `brew untap`/`brew tap` 刷新缓存后 `brew upgrade --cask jingshan` 冒烟验证一遍。
+0a. **v0.9.0 已发布**。下一步只根据真实反馈修复，不扩大扫描/删除范围。优先补 App test target，覆盖设置写失败、历史状态迁移、Uninstaller 的 Docker destructive guard。
+0b. **发版流程（M19 定，M22/M25 各走过一遍，可靠）**：改 `project.yml` 的 `MARKETING_VERSION`（已是 0.9.0）+ `CURRENT_PROJECT_VERSION`（已是 4）→ `xcodegen generate` → Release 构建 → `ditto -c -k --sequesterRsrc --keepParent 净山.app /tmp/jingshan-release/Jingshan-<version>.zip` → `shasum -a 256` 算摘要 → `gh release create v<version> <zip> --title ... --notes ...`（发到 kongshan-0924）→ 更新 `Casks/jingshan.rb` 的 `version`/`sha256`（`url` 随 `#{version}` 插值自动变）→ 把版本+cask+docs 一起 commit+push → `brew untap kongshan-0924/jingshan` + `brew tap kongshan-0924/jingshan https://github.com/kongshan-0924/jingshan` 刷新 → `brew upgrade --cask kongshan-0924/jingshan/jingshan` 实测升级+校验 sha+无 quarantine。
 1. **用户自己走查界面，看 M23 P0/P1/P2 的实际效果**：构建产物扫描是否有进度反馈了、hero 山形剪影是否干净、按钮/搜索框有没有系统蓝残留、卸载列表选中态、首页磁贴等高与系统概览三列、状态页副标题单行+Bento 底对齐、顶部"…"菜单展开是否正常。以及 M20 遗留的深色模式配色（估的第一版，尤其值得反馈）。发现问题就继续开新里程碑修（下一个版本发 0.8.1/0.9.0）。
 0b. **仓库地址已变**：以后所有 `gh`/`git push`/发版都对 `kongshan-0924/jingshan`；发新版流程见下方"下一步该做什么"第 0 条，注意 tap 名、Cask `url`/`homepage`、README 都已经是新地址，别再写回 `Ks-Ht`。
 2. （M20 新增）如果用户想要 GPU/温度/风扇监控，需要重新评估走 `IOAccelerator`/SMC 私有 API 的可靠性风险，建议单独开一个明确标注"实验性"的里程碑，不要假设这是顺手加卡片的工作量（见风险清单第 15 条）。
@@ -270,9 +282,32 @@ App 已构建、已安装、已验证可启动无崩溃。M19 完成 GitHub 开�
 
 ## 下一位 Agent 如何接手
 1. 先读本文件 + `docs/PROGRESS.md` + `docs/NEXT_STEPS.md`。
-2. `cd JingshanCore && swift test` 确认 146 个测试全绿。
+2. `cd JingshanCore && swift test` 确认 167 个测试全绿。
 3. 改了 App/Features/Permissions 下的文件结构（加/删文件）后记得 `xcodegen generate` 重新生成工程，再 `xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Debug build` 验证。
 4. Release 构建 + 安装：`xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Release build`，产物在 `~/Library/Developer/Xcode/DerivedData/Jingshan-*/Build/Products/Release/净山.app`，`cp -R` 到 `/Applications/` 替换旧版本即可（本机日常验证走这条路径，不必每次都过 Homebrew）。
 5. 如果要做界面相关改动，构建后至少用 `open /Applications/净山.app` 跑一下 + 检查 `log show --predicate 'process == "净山"'` 有没有 error/fault；如果拿到了 Screen Recording 权限，可以用 `screencapture` 截图辅助验证。
-6. **仓库已公开在 `https://github.com/Ks-Ht/jingshan`，且已有 Homebrew Cask（`Casks/jingshan.rb`）**——发新版本流程见上面"下一步该做什么"第 0 条；改动 `Casks/jingshan.rb` 后先本地 `brew style ks-ht/jingshan/jingshan`（不是直接对仓库里的文件路径跑，`brew style` 要求文件在已识别的 tap 里，要么先 push 再 `brew untap`/`brew tap` 刷新，要么直接改 `/opt/homebrew/Library/Taps/ks-ht/homebrew-jingshan/Casks/jingshan.rb` 里的本地副本测试语法后再同步改回仓库文件）确认没有 rubocop 报错。
+6. **仓库已公开在 `https://github.com/kongshan-0924/jingshan`，且已有 Homebrew Cask（`Casks/jingshan.rb`）**——发新版本流程见上面“下一步该做什么”第 0 条；改动 Cask 后先 `brew style`，推送并刷新 tap 后再按名称执行 `brew audit --cask --strict kongshan-0924/jingshan/jingshan`。
 7. **（M20 新增）视觉/组件相关的改动，先读 `Features/Shared/DesignSystem/` 整个目录**——这是现在唯一的视觉组件来源（取代了已删除的 `FeatureVisuals.swift`）。新增任何"这个操作有风险"的视觉提示，引用 `RiskTint`/`SystemHealthTint`（`DesignSystem/RiskVisuals.swift`），不要写字面量颜色；新增任何自定义动画，检查 `@Environment(\.accessibilityReduceMotion)` 或复用 `MotionEnvironment`，不要假设"这个动画很微小不用管"——M20 之前全项目一个这样的检查都没有，是从这一轮才开始要求的标准，不要开倒车。
+
+## 续二十八（2026-07-13：项目熟悉与验证）
+
+- 本轮为只读熟悉与验证，不改产品代码。已阅读 README、全部项目记录、配置、App 组合层、核心删除/扫描/恢复实现、测试与 Git 状态。
+- 现场验证：`swift test` 为 **157 tests / 30 suites / 0 failures**；Debug `xcodebuild` 成功；`git diff --check HEAD` 无空白错误。
+- 工作树状态确认：正式发布版仍为 v0.8.1；本地 M27/v0.9.0（约 45 个已改文件、另有新增的核心 History 测试与设计系统文件）未提交未发版。前序产品改动必须原样保留。
+- 下一位 Agent：先读本文件及 PROGRESS/NEXT_STEPS；用户未批准前不要提交、发布或覆盖现有工作树。下一件产品动作是等用户真机走查反馈，或在获得明确授权后按既有 v0.9.0 发布流程执行。
+
+## 续二十九（2026-07-31：只读通读与总结）
+
+- 本轮只读，不改产品代码。复核结论与"当前状态"一致：已发布 v0.8.1，工作树 v0.9.0（M27+M28）未提交未发版。
+- 现场验证：`swift test` = **167 tests / 30 suites / 0 failures**（与文档记载一致）。
+- 补充事实：工作树相对 HEAD 为 58 个文件、+1033/-337；`Casks/jingshan.rb` 仍是 `version 0.8.1` + 旧 sha256，发 0.9.0 时必须同步这两个字段（风险清单第 13 条）。
+- 代码量参考：Features 5381 行 / JingshanCore Sources 4085 行 / Tests 2962 行 / App 691 行 / Permissions 202 行。
+
+## 续三十（2026-08-01：深度阅读与独立验证）
+
+- 已完成：从 `RootView` 到六个功能 ViewModel，再到扫描器、`DeletionEngine`、Docker 独立清理引擎、历史恢复和监控采样器，逐条核对当前实现；结论与现有记录一致，安全核心边界清晰，产品已超出最初 MVP。
+- 修改文件：仅四份项目记录，无产品代码改动。
+- 测试：原地 `swift test` 因 `.build` 保存迁移前绝对路径而失败；改用独立 scratch path 后 **167 tests / 30 suites / 0 failures**。编译仍有 `SystemInfo.swift` 的 `String(cString:)` 弃用警告和若干测试 fixture 未使用返回值警告。
+- 当前状态：已发布 v0.8.1；本地 M27+M28/v0.9.0 未提交未发版。`project.yml` 为 0.9.0，Cask 仍为 0.8.1，当前是正确的发布边界。
+- 风险/注意事项：README 功能清单未覆盖大文件、历史恢复、菜单栏等已发布能力；App/UI 缺正式测试 target；五个 ViewModel 仍有重复的清理汇总/历史/重扫流程；原 `.build` 迁移缓存需后续择机清理或继续绕过。
+- 下一步/接手：先由用户走查 M28；未获授权不得提交或发布，尤其不要直接 `git add -A`。若继续质量收口，可先消除编译警告、补 README，再评估 App 层测试，而不是扩新功能。

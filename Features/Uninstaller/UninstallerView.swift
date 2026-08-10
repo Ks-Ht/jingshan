@@ -66,6 +66,7 @@ struct UninstallerView: View {
                     )
                 },
                 extraAcknowledgmentSatisfied: { _ in !viewModel.hasDestructiveSelection || acknowledgedDestructive },
+                tint: InkPalette.uninstallerAccent,
                 onConfirm: { permanently in
                     showingConfirmation = false
                     Task { await viewModel.performUninstall(permanently: permanently) }

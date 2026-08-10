@@ -25,9 +25,18 @@ final class AppSettings {
     }
 
     /// Whether the menu-bar tray item is shown. When off, no background
-    /// sampling runs for it.
+    /// sampling runs for it — the sampler is started/stopped right here so
+    /// the promise actually holds (it used to run forever once started, and
+    /// conversely never started when the tray was enabled mid-session).
     var menuBarEnabled: Bool {
-        didSet { defaults.set(menuBarEnabled, forKey: Self.menuBarEnabledKey) }
+        didSet {
+            defaults.set(menuBarEnabled, forKey: Self.menuBarEnabledKey)
+            if menuBarEnabled {
+                MenuBarViewModel.shared.start()
+            } else {
+                MenuBarViewModel.shared.stop()
+            }
+        }
     }
 
     /// Menu-bar icon style: false = ink-mountain logo, true = live CPU%.
@@ -36,9 +45,15 @@ final class AppSettings {
     }
 
     private(set) var exclusions: UserExclusionList
+    /// Non-nil when the on-disk protection list could not be loaded or a
+    /// requested edit could not be durably saved. Settings surfaces this so
+    /// the UI never claims an exclusion is permanent when it is only in
+    /// memory (or missing because the file is damaged).
+    private(set) var exclusionPersistenceError: String?
 
     /// User-configured Purge scan roots. Empty means "use the defaults"
-    /// (`~/Projects`, `~/GitHub`, `~/dev`) — mirrors Mole's `purge_paths`
+    /// (`~/workspace`, `~/Projects`, `~/Developer`, `~/GitHub`, `~/dev`) —
+    /// mirrors Mole's `purge_paths`
     /// behavior: once the user configures anything, only those paths are
     /// scanned.
     private(set) var purgeScanPaths: [String] {
@@ -63,7 +78,22 @@ final class AppSettings {
         self.hasCompletedOnboarding = defaults.bool(forKey: Self.hasCompletedOnboardingKey)
         self.menuBarEnabled = defaults.object(forKey: Self.menuBarEnabledKey) as? Bool ?? true
         self.menuBarShowsPercent = defaults.bool(forKey: Self.menuBarShowsPercentKey)
-        self.exclusions = (try? UserExclusionList.load(from: exclusionsURL)) ?? UserExclusionList()
+        if FileManager.default.fileExists(atPath: exclusionsURL.path) {
+            do {
+                self.exclusions = try UserExclusionList.load(from: exclusionsURL)
+                self.exclusionPersistenceError = nil
+            } catch {
+                // Fail closed. If a previously-saved protection list exists
+                // but cannot be read, treating it as empty would silently
+                // remove every user promise after restart. Protect the whole
+                // home directory until the user repairs/replaces the file.
+                self.exclusions = UserExclusionList(excludedPaths: [NSHomeDirectory()])
+                self.exclusionPersistenceError = "受保护路径配置无法读取；为避免误删，已临时保护整个个人目录。\n\(error.localizedDescription)"
+            }
+        } else {
+            self.exclusions = UserExclusionList()
+            self.exclusionPersistenceError = nil
+        }
         self.purgeScanPaths = defaults.stringArray(forKey: Self.purgeScanPathsKey) ?? []
     }
 
@@ -101,22 +131,37 @@ final class AppSettings {
         exclusions.excludedPaths.sorted()
     }
 
-    func addExclusion(path: String) {
+    @discardableResult
+    func addExclusion(path: String) -> Bool {
         var updated = exclusions
         updated.excludedPaths.insert(PathValidator.normalize(path))
-        persist(updated)
+        return persist(updated)
     }
 
-    func removeExclusion(path: String) {
+    @discardableResult
+    func removeExclusion(path: String) -> Bool {
         var updated = exclusions
         updated.excludedPaths.remove(path)
         updated.excludedPaths.remove(PathValidator.normalize(path))
-        persist(updated)
+        return persist(updated)
     }
 
-    private func persist(_ updated: UserExclusionList) {
-        exclusions = updated
-        try? updated.save(to: exclusionsURL)
+    func clearExclusionPersistenceError() {
+        exclusionPersistenceError = nil
+    }
+
+    private func persist(_ updated: UserExclusionList) -> Bool {
+        do {
+            // Commit to disk first. The in-memory/UI state changes only once
+            // the user's "永不清理" promise is durable across relaunches.
+            try updated.save(to: exclusionsURL)
+            exclusions = updated
+            exclusionPersistenceError = nil
+            return true
+        } catch {
+            exclusionPersistenceError = "受保护路径未保存，设置没有生效。\n\(error.localizedDescription)"
+            return false
+        }
     }
 
     // MARK: - Purge scan paths

@@ -1,25 +1,29 @@
 import Foundation
-
-/// One item that was moved to Trash during a cleanup, remembered so it can be
-/// restored to exactly where it came from (B2 one-click restore).
-struct TrashedItem: Codable, Equatable {
-    let originalPath: String
-    let trashPath: String
-}
+import JingshanCore
 
 /// A single cleanup event, persisted locally as an audit trail of "what did I
 /// actually delete" (A1) and the backing data for one-click restore (B2).
+/// `TrashedItem` and the restore algorithm live in `JingshanCore` (History/)
+/// where they are unit-tested; this record + store is the App-side
+/// persistence/observation shell.
 struct CleanupRecord: Codable, Identifiable, Equatable {
     let id: UUID
     let date: Date
-    /// Which module ran it, e.g. "清理" / "构建产物" / "卸载应用".
+    /// Which module ran it, e.g. "清理" / "构建产物" / "卸载应用" / "大文件".
     let module: String
     let freedBytes: Int64
     let itemCount: Int
-    /// The subset of deleted items that went to Trash (permanent deletions
-    /// aren't restorable and are omitted here).
+    /// The still-restorable subset of deleted items (moved to Trash and not
+    /// yet successfully restored). Permanent deletions are never in here;
+    /// successfully restored / permanently-unrestorable entries are removed
+    /// by `restore`.
     var trashedItems: [TrashedItem]
     var restored: Bool = false
+    /// Optional for backwards-compatible decoding of records written before
+    /// v0.9.0. `true` means a restore attempt permanently lost at least one
+    /// item (missing from Trash, fingerprint mismatch, or invalid source), so
+    /// an empty retry list must not be presented as "已恢复".
+    var restoreHadFailures: Bool?
 }
 
 /// Local, private cleanup history (never uploaded). Persisted as JSON under
@@ -48,7 +52,9 @@ final class CleanupHistoryStore {
     var totalCleanupCount: Int { records.count }
 
     /// Appends a cleanup event. No-op for empty cleanups and dry-runs (callers
-    /// pass `itemCount: 0` / no items in those cases).
+    /// pass `itemCount: 0` / no items in those cases). Each trashed file is
+    /// fingerprinted (size + inode) while fresh, so restore can later verify
+    /// it's still the SAME file at that Trash path.
     func record(module: String, freedBytes: Int64, itemCount: Int, trashedItems: [TrashedItem]) {
         guard itemCount > 0 else { return }
         let entry = CleanupRecord(
@@ -57,7 +63,8 @@ final class CleanupHistoryStore {
             module: module,
             freedBytes: freedBytes,
             itemCount: itemCount,
-            trashedItems: trashedItems
+            trashedItems: trashedItems.map { $0.fingerprinted() },
+            restoreHadFailures: nil
         )
         records.insert(entry, at: 0)
         if records.count > Self.maxRecords {
@@ -66,33 +73,25 @@ final class CleanupHistoryStore {
         save()
     }
 
-    /// Restores a cleanup's trashed items back to their original locations.
-    /// Purely additive/non-destructive: an item is moved back only if it's
-    /// still in the Trash AND its original path is currently free (never
-    /// overwrites anything). Returns how many were restored vs. failed.
+    /// Restores a cleanup's trashed items back to their original locations via
+    /// the audited `CleanupRestorer` (Trash-anchored, fingerprint-verified,
+    /// never overwrites). Retryable failures stay on the record so the
+    /// restore button remains available; the record is only marked restored
+    /// once nothing restorable is left.
     @discardableResult
     func restore(_ record: CleanupRecord) -> (restored: Int, failed: Int) {
-        let fm = FileManager.default
-        var restored = 0
-        var failed = 0
-        for item in record.trashedItems {
-            let source = URL(fileURLWithPath: item.trashPath)
-            let destination = URL(fileURLWithPath: item.originalPath)
-            guard fm.fileExists(atPath: source.path) else { continue } // already gone from Trash
-            guard !fm.fileExists(atPath: destination.path) else { failed += 1; continue } // won't overwrite
-            do {
-                try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try fm.moveItem(at: source, to: destination)
-                restored += 1
-            } catch {
-                failed += 1
-            }
-        }
+        let outcome = CleanupRestorer.restore(record.trashedItems)
         if let index = records.firstIndex(where: { $0.id == record.id }) {
-            records[index].restored = true
+            records[index].trashedItems = outcome.remaining
+            records[index].restoreHadFailures = outcome.failedCount > 0
+            if outcome.remaining.isEmpty && outcome.failedCount == 0 {
+                records[index].restored = true
+            } else {
+                records[index].restored = false
+            }
             save()
         }
-        return (restored, failed)
+        return (outcome.restoredCount, outcome.failedCount)
     }
 
     func clear() {

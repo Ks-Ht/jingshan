@@ -9,6 +9,7 @@ struct CleanupHistoryView: View {
 
     @State private var store = CleanupHistoryStore.shared
     @State private var restoreResult: RestoreResult?
+    @State private var confirmingClear = false
 
     private struct RestoreResult: Identifiable {
         let id = UUID()
@@ -54,14 +55,22 @@ struct CleanupHistoryView: View {
                 Text("累计已释放 ")
                     .font(.caption).foregroundStyle(.secondary)
                 + Text(ByteFormatter.string(fromBytes: store.totalFreedBytes))
-                    .font(.caption.weight(.semibold)).foregroundColor(InkPalette.accent)
+                    .font(.caption.weight(.semibold)).foregroundStyle(InkPalette.accent)
                 + Text(" · 共 \(store.totalCleanupCount) 次清理 · 仅保存在本机")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
             if !store.records.isEmpty {
-                Button("清空记录") { store.clear() }
-                    .tint(.secondary)
+                // Destructive-styled + confirmed: clearing erases the
+                // restore bookkeeping (the Trash contents stay untouched).
+                Button("清空记录", role: .destructive) { confirmingClear = true }
+                    .tint(RiskTint.destructive)
+                    .confirmationDialog("清空全部清理记录？", isPresented: $confirmingClear) {
+                        Button("清空记录", role: .destructive) { store.clear() }
+                        Button("取消", role: .cancel) {}
+                    } message: {
+                        Text("记录清空后，「一键恢复」将不再可用（废纸篓里的文件不受影响）。")
+                    }
             }
             Button("完成") { onClose() }
                 .buttonStyle(.borderedProminent)
@@ -87,6 +96,10 @@ struct CleanupHistoryView: View {
                 Label("已恢复", systemImage: "arrow.uturn.backward.circle.fill")
                     .font(.caption)
                     .foregroundStyle(InkPalette.accent)
+            } else if record.restoreHadFailures == true && record.trashedItems.isEmpty {
+                Label("未完全恢复", systemImage: "exclamationmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(RiskTint.caution)
             } else if record.trashedItems.isEmpty {
                 Text("不可恢复")
                     .font(.caption)

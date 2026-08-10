@@ -10,6 +10,11 @@ struct JingshanApp: App {
         WindowGroup(id: "main") {
             RootView()
                 .frame(minWidth: 900, minHeight: 600)
+                // Root brand accent: sheets, alerts, focus rings and text
+                // selection inherit this instead of falling back to system
+                // blue (the AccentColor asset is an empty placeholder).
+                // Module pages override with their own tint locally.
+                .tint(InkPalette.accent)
         }
         .windowResizability(.contentMinSize)
         // Nav lives in a custom top bar, so hide the system title bar and let
@@ -19,6 +24,7 @@ struct JingshanApp: App {
 
         Settings {
             SettingsView()
+                .tint(InkPalette.accent)
         }
 
         // Menu-bar tray (A4): a throttled live monitor + quick actions. When

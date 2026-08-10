@@ -19,10 +19,10 @@ public struct UserLogScanner: CategoryScanning {
     }
 
     public func scan() async -> ScanCategory {
-        let items = await ScanningSupport.scanImmediateChildren(
+        let result = await ScanningSupport.scanImmediateChildren(
             of: directoryPath,
             excludedNames: excludedNames
         )
-        return ScanCategory(id: categoryID, displayName: displayName, items: items)
+        return ScanCategory(id: categoryID, displayName: displayName, items: result.items, issues: result.issues)
     }
 }

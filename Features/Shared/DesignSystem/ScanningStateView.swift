@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Skeleton-row loading state shown while a scan is in progress, instead of
-/// a blank list or a bare spinner. Pair with `InkWashCanvas(isFlowing: true)`
+/// a blank list or a bare spinner. Shown while a scan is in flight.
 /// in the page's `HeroHeader` so the illustration animates while this shows.
 struct ScanningStateView: View {
     var statusText: String?
