@@ -395,3 +395,18 @@
   - 打包：`ditto -c -k --sequesterRsrc --keepParent` → `Jingshan-0.9.1.zip`，**2,599,144 bytes**，SHA-256 `226c625938656dbbed51b21ae88101c3598a8bfa07e65d2169b64b212b94b580`。
   - `brew style Casks/jingshan.rb` → no offenses detected。
 - **风险/注意事项**：上一次本地 Release 构建（8/23 16:00）是 arm64-only，起因是未显式指定 `-destination generic/platform=macOS` 与 `ARCHS`；本轮已显式指定并核验。发版仍为 ad-hoc 签名、未经 Apple 公证。`.superpowers/` 是未跟踪的本地脑暴草图，不入库，随目录删除一并消失（已提前告知用户）。
+
+## 2026-08-23（承上）：v0.9.1 发布核验与本地清理执行
+
+- **发布结果**：`main` 推送至 `068f0fb`（`merge: release v0.9.1`），tag `v0.9.1` 已推送并指向同一提交；Release 页 https://github.com/kongshan-0924/jingshan/releases/tag/v0.9.1 ，资产 `Jingshan-0.9.1.zip` 状态 uploaded、2,599,144 bytes。
+- **完整性核验**：GitHub API 返回资产 digest `sha256:226c625938656dbbed51b21ae88101c3598a8bfa07e65d2169b64b212b94b580`，与本地构建产物、`Casks/jingshan.rb` 记录的三者一致；`git rev-parse HEAD` 与 `origin/main` 相同。确认远端已是完整回滚点后才执行删除。
+- **本地清理（用户批准的四项，全部不可逆）**：
+  1. Homebrew：`brew uninstall --cask ks-ht/jingshan/jingshan --force`（安装来源是 ks-ht tap，版本 0.8.1），连带移除 `/Applications/净山.app` 并清空 Caskroom；随后 `brew untap kongshan-0924/jingshan`（198 files / 2.4MB）与 `brew untap ks-ht/jingshan`（199 files / 2.4MB）。**注意**：这两个 tap 是内嵌式 Cask 设计的产物，实际是本仓库的完整克隆，因此也属于本地代码副本。
+  2. `/Applications/净山.app`：随 cask 卸载移除，已复核不存在。
+  3. Xcode DerivedData：`rm -rf ~/Library/Developer/Xcode/DerivedData/Jingshan-bwobbfanpodynybcsthtahbkxvnl`（**120M**）；无 Xcode Archives 残留。
+  4. 项目源码目录 `/Users/kaysen/workspace/mac/cleanmac`：在本条记录推送到 GitHub 之后删除（含 `.git`、`docs`、生成的 `Jingshan.xcodeproj`、`JingshanCore/.swiftpm`）。
+- **明确保留（用户未选中，不删）**：`~/Library/Application Support/Jingshan`、`~/Library/Logs/Jingshan`、`~/Library/Preferences/net.kongshan.jingshan.plist`。
+- **删除前占用检查**：`pgrep` 无 净山/Jingshan 进程，Xcode 未运行，`lsof` 中持有 `cleanmac` 路径的仅为本会话自身的 shell 进程。
+- **永久丢失**：`.superpowers/`（未跟踪的本地设计脑暴 HTML，约 36K），事前已告知用户。
+- **恢复方式**：`git clone git@github.com:kongshan-0924/jingshan.git` → `xcodegen generate`（`.xcodeproj` 是派生产物不入库）→ `cd JingshanCore && swift test --scratch-path /private/tmp/<独立目录>`；成品直接从 Release 页下载 `Jingshan-0.9.1.zip`，或 `brew tap kongshan-0924/jingshan https://github.com/kongshan-0924/jingshan` + `brew install --cask kongshan-0924/jingshan/jingshan`。
+- **下一步**：本机已无该项目任何代码与成品，后续开发需重新 clone。
