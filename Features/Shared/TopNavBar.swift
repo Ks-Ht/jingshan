@@ -70,8 +70,9 @@ struct TopNavBar: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 30, height: 26)
-                .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+                .frame(width: 28, height: 28)
+                .background(Color.primary.opacity(0.05), in: Circle())
+                .overlay(Circle().stroke(Color.primary.opacity(0.06), lineWidth: 0.5))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -104,15 +105,18 @@ private struct TabPill: View {
     var body: some View {
         Button(action: action) {
             Text(tab.title)
-                .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
+                .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
                 .foregroundStyle(isSelected ? InkPalette.accent : Color.secondary)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 13)
                 .padding(.vertical, 6)
                 .background {
                     if isSelected {
                         // One shared capsule that slides between tabs.
                         Capsule()
-                            .fill(InkPalette.accent.opacity(0.16))
+                            .fill(InkPalette.accent.opacity(0.15))
+                            .overlay(
+                                Capsule().stroke(InkPalette.accent.opacity(0.22), lineWidth: 0.5)
+                            )
                             .matchedGeometryEffect(id: "selectedPill", in: namespace)
                     } else if isHovering {
                         Capsule().fill(Color.primary.opacity(0.05))

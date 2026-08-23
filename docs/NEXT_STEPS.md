@@ -1,5 +1,5 @@
-## ⭐ 当前状态：v0.9.0 已审计并发布
-M27+M28 已收口并发布为 v0.9.0：扫描问题态、专业清理结果页、墨韵 Studio 设计系统 v2，以及本轮审计确认的 3 项中等完整性问题均已修复。核心测试 174/30 全绿；Debug 和 arm64+x86_64 通用 Release 构建通过；Cask 已同步 0.9.0 与发布 ZIP 的 SHA-256。
+## ⭐ 当前状态：v0.9.1 已发布
+M29 的 UI 质感与布局优化已收口并发布为 v0.9.1：卡片高程/阴影与 Hover 动效精修、空状态徽章容器、首页磁贴扩为 6 个（新增「大文件」并打通体检联动）、电池卡片与 CPU/进程卡片重做、顶部导航胶囊态优化。核心测试 174/30 全绿；arm64+x86_64 通用 Release 构建通过、codesign 严格校验通过、Release 无 harness 符号；Cask 已同步 0.9.1 与发布 ZIP 的 SHA-256。
 **下一轮候选**（按价值）：① App test target（设置持久化、历史状态迁移、Uninstaller Docker guard）；② `CleanupExecutor` 收敛重复清理循环；③ DockerCLI 持续读取 stdout/stderr，避免异常大输出填满 Pipe；④ 正式 Developer ID 签名与公证；⑤ ⌘K / i18n / 重复文件 / 定时提醒。
 
 # NEXT STEPS
@@ -13,11 +13,11 @@ M27+M28 已收口并发布为 v0.9.0：扫描问题态、专业清理结果页�
 6. **非沙盒 + ad-hoc 本机签名**（已落地，`net.kongshan.jingshan`）。正式 Developer ID 签名/公证留给用户自己决定是否要做。
 7. **工程生成工具 = xcodegen**，真源是 `project.yml`。
 
-## ⭐ 立即的下一步：观察 v0.9.0 实际使用反馈
+## ⭐ 立即的下一步：观察 v0.9.1 实际使用反馈
 
 重点观察：完全磁盘访问未授权时的问题提示、清理搜索/筛选、Docker Desktop 启停边界、数据卷身份变化后的拒绝提示、历史恢复与受保护路径配置异常提示。若无真实问题，不继续扩扫描范围或重构删除链路。
 
-开发验证仍建议使用 `swift test --scratch-path /private/tmp/<独立目录>`，避免仓库旧 `.build` 的绝对路径缓存。发布 ZIP：`Jingshan-0.9.0.zip`，SHA-256 `a22ce2ef6d5bb3804c3e2cae0e91f4a31f70ee271546a98b6c06f085b615ab27`。
+开发验证仍建议使用 `swift test --scratch-path /private/tmp/<独立目录>`，避免仓库旧 `.build` 的绝对路径缓存。发布 ZIP：`Jingshan-0.9.1.zip`，SHA-256 `226c625938656dbbed51b21ae88101c3598a8bfa07e65d2169b64b212b94b580`。
 
 后续仅在有实测需求时再做：App 测试 target、更细粒度的枚举错误、AI 模型/Group Containers/系统级残留。暂不引入 `CleanupExecutor`、共享指标总线或新扫描 DSL，避免在现有行为一致且无性能证据时扩大架构。
 

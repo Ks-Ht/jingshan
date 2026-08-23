@@ -81,6 +81,7 @@ struct RootView: View {
                 dockerVM: dockerVM,
                 purgeVM: purgeVM,
                 uninstallVM: uninstallVM,
+                largeFilesVM: largeFilesVM,
                 statusVM: statusVM,
                 lastCheckDate: lastCheckDate,
                 onOpen: { open($0) },
@@ -115,6 +116,7 @@ struct RootView: View {
         dockerVM.refresh()
         purgeVM.startScan()
         uninstallVM.startScan()
+        largeFilesVM.startScan()
         statusVM.start()
         lastCheckDate = Date()
     }

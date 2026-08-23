@@ -350,3 +350,48 @@
 - 验证：`swift test --scratch-path /private/tmp/jingshan-v090-dangling-tests` 为 174 tests / 30 suites / 0 failures；Debug 构建通过；通用 Release 构建通过；codesign 严格校验通过（ad-hoc）；版本 0.9.0/build 4；SnapshotHarness 符号不存在；结构化审计 JSON 通过 schema validator。
 - 发布资源：`Jingshan-0.9.0.zip`，2,566,994 bytes，SHA-256 `a22ce2ef6d5bb3804c3e2cae0e91f4a31f70ee271546a98b6c06f085b615ab27`；Cask 已同步。发布页：https://github.com/kongshan-0924/jingshan/releases/tag/v0.9.0
 - 已知剩余：Docker/文件系统状态检查无法与跨进程文件移动原子绑定；DockerCLI Pipe 大输出可能阻塞；App/SwiftUI 层仍缺独立 test target；正式 Developer ID 签名与公证仍未做。
+
+## 2026-08-18：接手前通读（只读）
+
+- 已完成：应用户要求通读代码与文档以接手项目。读 README、HANDOFF.md/PROGRESS.md/NEXT_STEPS.md 全文、project.yml、Package.swift、App 组合层（JingshanApp/RootView/AppSettings/CleanupHistory/MenuBarExtraScene）、JingshanCore 安全引擎（DeletionEngine/PathValidator/ProtectionEvaluator/ScanCoordinator）、DockerCleanupEngine 双机制、CleanViewModel 与项目文件清单。
+- 修改文件：仅本文件追加本条记录；未改产品代码，未触碰工作树。
+- 测试结果：`cd JingshanCore && swift test --scratch-path /private/tmp/jingshan-handoff-test`（DSH 沙箱需 danger-full-access）= **174 tests / 30 suites / 0 failures**，与文档记载一致。
+- 当前状态：正式发布版 **v0.9.0**（240f2cc 已合并推送，仓库 kongshan-0924/jingshan）；工作树干净（仅 `.superpowers/` 未跟踪）。`project.yml` MARKETING_VERSION=0.9.0 / CURRENT_PROJECT_VERSION=4；Cask 已同步 0.9.0。
+- 风险/注意事项：`.xcodeproj` 是 xcodegen 派生产物（已 gitignore），改工程结构必须改 project.yml 后 `xcodegen generate`；删除唯一入口 DeletionEngine、Docker 双机制隔离、废纸篓特殊路径、跨分类去重排除名单为人工维护——改动前先读 HANDOFF 对应设计要点；本机 swift test 默认 `.build` 含迁移前绝对路径，建议继续用独立 scratch path；正式 Developer ID 签名/公证、App test target 未做。
+- 下一步/交接：用户走查 v0.9.0 后按反馈修；发版流程见 HANDOFF「下一步该做什么」第 0b 条（改版本号→构建→ditto→sha256→gh release→Cask→brew 冒烟）。
+
+## 2026-08-23：UI 与布局全面优化与版本替换
+
+- **本轮问题**：根据用户需求，对 App UI 质感、布局排版、模块完整性进行系统性深入优化，并在 `/Applications/净山.app` 替换安装最新 Release 版本运行。
+- **关键改动**：
+  1. `Features/Shared/DesignSystem/InkElevation.swift`：优化卡片高程与阴影（微调为 0.8px 细描边、双层扩散阴影 `y: 1, r: 2` 与 `y: 5, r: 12`），优化 Hover 弹簧动画（1.008x 放大 + 14pt 阴影扩散）。
+  2. `Features/Shared/DesignSystem/EmptyStateView.swift`：为空状态增加 56x56 柔和背景圆角徽章容器与间距节奏。
+  3. `Features/Home/HomeView.swift` & `Features/Shared/RootView.swift`：
+     - 首页磁贴从 5 模块扩展为 6 模块（新增「大文件」磁贴，打通数据聚合与一键体检联动）。
+     - 优化磁贴图标大小（36x36 连续圆角 + 细描边 + 悬浮高亮边框）和 17.5pt 数值排版。
+     - 优化 `HealthCheckHeroCard` 渐变水墨质感（`heroWashCard`）与系统概览条形指示器。
+  4. `Features/Status/Widgets/BatteryCard.swift`：电池卡片升级为带充电状态胶囊徽章、26pt 圆体粗体与水平电量进度槽。
+  5. `Features/Status/Widgets/StatusExtraCards.swift`：CPU 核心网格条形柱提升为 6px 圆角胶囊，进程列表增加状态圆点与单行百分比对齐。
+  6. `Features/Shared/TopNavBar.swift`：优化未选中与选中状态胶囊排版，加入微光边框与平滑滑动。
+  7. `App/SnapshotHarness.swift`：同步 6 磁贴测试配置。
+- **执行命令与验证**：
+  - 核心测试：`cd JingshanCore && swift test --scratch-path /private/tmp/jingshan-ui-opt-test` → **174 tests / 30 suites / 0 failures 全部通过**。
+  - 工程与构建：`xcodegen generate` + `xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Release build` → **BUILD SUCCEEDED**。
+  - 快照验证：`JINGSHAN_SNAPSHOT=1` 运行生成 `home.png`、`home-dark.png`、`status.png`、`purge.png` 等，通过 `read_image` 逐一完成浅色/深色视觉审查，版面平衡清爽，无溢出或布局断裂。
+  - 安装与运行：成功覆盖安装到 `/Applications/净山.app` 并启动，进程 PID 正常活跃。
+- **当前状态**：UI 优化全部落地并已在 `/Applications/净山.app` 运行。
+- **风险**：无破坏性改动；未触碰 `DeletionEngine` 与安全白名单机制。
+- **下一步**：供用户在 macOS 本机直接操作体验全新 UI；后续发版时按标准发布流程打包。
+
+## 2026-08-23：发布 v0.9.1 并清理本地全部项目文件
+
+- **本轮问题**：用户要求把代码与最新构建版本上传 GitHub，随后清理本地该项目相关的构建产物、成品、安装程序、代码与文档，只保留 GitHub 仓库上的代码与成品。
+- **用户决策**：① 今天的 UI 改动作为新版本 **v0.9.1** 发布（不覆盖 v0.9.0 资产，因为本地那次构建是 arm64-only，直接上传会丢掉 x86_64 支持）；② 清理范围确认为四项——项目源码目录、Xcode DerivedData、`/Applications/净山.app`、Homebrew tap + Caskroom；③ **明确不删** App 用户数据（`~/Library/Application Support/Jingshan`、`~/Library/Logs/Jingshan`、`~/Library/Preferences/net.kongshan.jingshan.plist`）。
+- **修改文件**：`project.yml`（MARKETING_VERSION 0.9.0→0.9.1，CURRENT_PROJECT_VERSION 4→5）、`Casks/jingshan.rb`（version + sha256）、`docs/HANDOFF.md`、`docs/NEXT_STEPS.md`、`docs/PROGRESS.md`、本文件；以及上一条记录里 M29 的 7 个 UI 文件一并提交。
+- **执行命令与验证**：
+  - `swift test --scratch-path <独立目录>` → **174 tests / 30 suites / 0 failures**。
+  - `xcodegen generate` → `xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration Release -destination 'generic/platform=macOS' ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO clean build` → **BUILD SUCCEEDED**。
+  - 产物核验：`lipo -archs` = **x86_64 arm64**（通用）；版本 **0.9.1 / build 5**；`codesign --verify --deep --strict` 通过（ad-hoc）；`nm | grep SnapshotHarness` = **0**。
+  - 打包：`ditto -c -k --sequesterRsrc --keepParent` → `Jingshan-0.9.1.zip`，**2,599,144 bytes**，SHA-256 `226c625938656dbbed51b21ae88101c3598a8bfa07e65d2169b64b212b94b580`。
+  - `brew style Casks/jingshan.rb` → no offenses detected。
+- **风险/注意事项**：上一次本地 Release 构建（8/23 16:00）是 arm64-only，起因是未显式指定 `-destination generic/platform=macOS` 与 `ARCHS`；本轮已显式指定并核验。发版仍为 ad-hoc 签名、未经 Apple 公证。`.superpowers/` 是未跟踪的本地脑暴草图，不入库，随目录删除一并消失（已提前告知用户）。
