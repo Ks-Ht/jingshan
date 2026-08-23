@@ -1,6 +1,6 @@
 cask "jingshan" do
-  version "0.9.0"
-  sha256 "a22ce2ef6d5bb3804c3e2cae0e91f4a31f70ee271546a98b6c06f085b615ab27"
+  version "0.9.1"
+  sha256 "226c625938656dbbed51b21ae88101c3598a8bfa07e65d2169b64b212b94b580"
 
   url "https://github.com/kongshan-0924/jingshan/releases/download/v#{version}/Jingshan-#{version}.zip"
   name "净山"

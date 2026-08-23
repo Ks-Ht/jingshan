@@ -2,14 +2,15 @@ import JingshanCore
 import SwiftUI
 
 /// The landing tab: a health-check hero (score ring + one-tap check + primary
-/// actions), a row of five module tiles that jump to their tab, and a live
-/// system-overview card. Reads the five module view models (owned by
-/// `RootView`) directly so its numbers reflect each module's latest scan.
+/// actions), a row of six module tiles that jump to their tab, and a live
+/// system-overview card. Reads the module view models (owned by `RootView`)
+/// directly so its numbers reflect each module's latest scan.
 struct HomeView: View {
     let cleanVM: CleanViewModel
     let dockerVM: DockerViewModel
     let purgeVM: PurgeViewModel
     let uninstallVM: UninstallerViewModel
+    let largeFilesVM: LargeFilesViewModel
     let statusVM: StatusViewModel
 
     let lastCheckDate: Date?
@@ -27,18 +28,19 @@ struct HomeView: View {
                     healthScore: statusVM.healthScorePercent,
                     worstUsage: statusVM.worstUsagePercent,
                     cleanableBytes: cleanableBytes,
-                    hasCleanScan: cleanVM.hasScannedOnce || purgeVM.hasScannedOnce,
+                    hasCleanScan: cleanVM.hasScannedOnce || purgeVM.hasScannedOnce || largeFilesVM.hasScannedOnce,
                     lastCheckDate: lastCheckDate,
                     isChecking: isChecking,
                     onHealthCheck: onHealthCheck,
                     onClean: { onOpen(.clean) }
                 )
 
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     ModuleTile(tab: .clean, name: "清理", value: cleanValue, onOpen: onOpen)
                     ModuleTile(tab: .docker, name: "Docker", value: dockerValue, onOpen: onOpen)
                     ModuleTile(tab: .purge, name: "构建产物", value: purgeValue, onOpen: onOpen)
                     ModuleTile(tab: .uninstall, name: "卸载应用", value: uninstallValue, onOpen: onOpen)
+                    ModuleTile(tab: .largeFiles, name: "大文件", value: largeFilesValue, onOpen: onOpen)
                     ModuleTile(tab: .status, name: "状态", value: statusValue, onOpen: onOpen)
                 }
 
@@ -60,17 +62,14 @@ struct HomeView: View {
         .sheet(isPresented: $showingHistory) {
             CleanupHistoryView(onClose: { showingHistory = false })
         }
-        // Sampling is started/stopped by RootView based on the active tab, not
-        // here — Home and Status share one `statusVM`, and toggling it from
-        // both views' appear/disappear races during a cross-fade tab switch.
     }
 
     private var cleanableBytes: Int64 {
-        cleanVM.totalReclaimableBytes + purgeVM.totalReclaimableBytes
+        cleanVM.totalReclaimableBytes + purgeVM.totalReclaimableBytes + largeFilesVM.totalBytes
     }
 
     private var isChecking: Bool {
-        cleanVM.isScanning || dockerVM.isScanning || purgeVM.isScanning || uninstallVM.isScanningApps
+        cleanVM.isScanning || dockerVM.isScanning || purgeVM.isScanning || uninstallVM.isScanningApps || largeFilesVM.isScanning
     }
 
     private var cleanValue: TileValue {
@@ -86,6 +85,9 @@ struct HomeView: View {
         uninstallVM.installedApps.isEmpty
             ? (uninstallVM.isScanningApps ? .data("扫描中") : .pending)
             : .data("\(uninstallVM.installedApps.count) 个")
+    }
+    private var largeFilesValue: TileValue {
+        largeFilesVM.hasScannedOnce ? .data(ByteFormatter.string(fromBytes: largeFilesVM.totalBytes)) : .pending
     }
     private var statusValue: TileValue {
         statusVM.hasSampledOnce ? .data("\(Int(statusVM.worstUsagePercent.rounded()))%") : .placeholder
@@ -211,18 +213,18 @@ private struct ModuleTile: View {
 
     var body: some View {
         Button { onOpen(tab) } label: {
-            // Fixed vertical rhythm (icon → 8 → name → 4 → value), top-aligned,
-            // and stretched to `maxHeight: .infinity` so all five tiles in the
-            // row share the tallest one's height (equal-height, bottom edges
-            // aligned) instead of each sizing to its own content.
             VStack(alignment: .leading, spacing: 0) {
                 Image(systemName: tab.systemImage)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(tab.tint)
-                    .frame(width: 34, height: 34)
-                    .background(tab.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
+                    .frame(width: 36, height: 36)
+                    .background(tab.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(tab.tint.opacity(0.18), lineWidth: 0.5)
+                    )
                 Text(name)
-                    .font(.system(size: 12))
+                    .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .padding(.top, 8)
                 valueText
@@ -231,8 +233,8 @@ private struct ModuleTile: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .homeCard()
             .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(tab.tint.opacity(isHovering ? 0.4 : 0), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(tab.tint.opacity(isHovering ? 0.35 : 0), lineWidth: 1.2)
             )
         }
         .buttonStyle(.plain)
@@ -241,8 +243,7 @@ private struct ModuleTile: View {
         .accessibilityElement(children: .combine)
     }
 
-    // Main datum: 17px rounded semibold, monospaced digits. Real values take
-    // the primary ink; "待扫描"/"--" empty states are muted placeholders.
+    // Main datum: 17.5px rounded semibold, monospaced digits.
     @ViewBuilder private var valueText: some View {
         switch value {
         case .data(let string):
@@ -252,7 +253,7 @@ private struct ModuleTile: View {
                 .contentTransition(.numericText())
         case .pending:
             Text("待扫描")
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.tertiary)
         case .placeholder:
             Text("--")
@@ -271,11 +272,8 @@ private struct SystemOverviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("系统概览").font(.headline)
-            // Even three-column grid: each cell carries its own label + right-
-            // aligned percent above a full-cell-width bar, so the three bars are
-            // equal length and evenly spaced (the old single row let the bars run
-            // long and bunched unevenly).
+            Text("系统概览")
+                .font(.headline)
             HStack(alignment: .top, spacing: 16) {
                 OverviewCell(label: "CPU", percent: cpu, base: InkPalette.accent)
                 OverviewCell(label: "内存", percent: memory, base: InkPalette.accent)
@@ -292,9 +290,6 @@ private struct OverviewCell: View {
     let percent: Double?
     let base: Color
 
-    /// Escalates the base "healthy" tint through the app-wide semantic
-    /// thresholds (70% caution / 90% danger) — same pair `SystemHealthTint`
-    /// uses, so this bar and the health ring never disagree about a number.
     private var tint: Color {
         guard let percent else { return .secondary }
         if percent >= 90 { return RiskTint.destructive }
@@ -306,7 +301,7 @@ private struct OverviewCell: View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 4) {
                 Text(label)
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 4)
                 Text(percent.map { "\(Int($0.rounded()))%" } ?? "--")
@@ -317,13 +312,13 @@ private struct OverviewCell: View {
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color.primary.opacity(0.08))
+                    Capsule().fill(Color.primary.opacity(0.07))
                     Capsule()
                         .fill(tint)
-                        .frame(width: geo.size.width * CGFloat((percent ?? 0) / 100))
+                        .frame(width: max(0, min(geo.size.width, geo.size.width * CGFloat((percent ?? 0) / 100))))
                 }
             }
-            .frame(height: 6)
+            .frame(height: 7)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
@@ -343,8 +338,12 @@ private struct CumulativeHistoryCard: View {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(InkPalette.accent)
-                .frame(width: 34, height: 34)
-                .background(InkPalette.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 9))
+                .frame(width: 36, height: 36)
+                .background(InkPalette.accent.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(InkPalette.accent.opacity(0.18), lineWidth: 0.5)
+                )
             VStack(alignment: .leading, spacing: 2) {
                 (Text("累计已释放 ")
                     + Text(ByteFormatter.string(fromBytes: totalBytes))
@@ -376,36 +375,32 @@ private extension View {
 
     /// The health-check hero's signature chrome: the shared card surface with
     /// a brand-green wash draining from the top-left and its own faint
-    /// mountain silhouette on the floor — the one card on the page allowed to
-    /// be atmospheric.
+    /// mountain silhouette on the floor.
     func heroWashCard() -> some View {
         self
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(alignment: .bottom) {
-                MountainSilhouette(tint: InkPalette.accent, height: 48)
+                MountainSilhouette(tint: InkPalette.accent, height: 52)
             }
             .background(
                 LinearGradient(
-                    colors: [InkPalette.accent.opacity(0.10), InkPalette.accent.opacity(0.02)],
-                    startPoint: .topLeading, endPoint: .bottom
+                    colors: [InkPalette.accent.opacity(0.12), InkPalette.accent.opacity(0.02)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
                 )
             )
             .background(InkPalette.card)
             .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(InkPalette.accent.opacity(0.14), lineWidth: 0.5))
-            .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
-            .shadow(color: .black.opacity(0.06), radius: 14, y: 6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(InkPalette.accent.opacity(0.18), lineWidth: 0.8)
+            )
+            .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+            .shadow(color: .black.opacity(0.05), radius: 14, y: 6)
     }
 }
 
 #if DEBUG
-/// A fully-populated home layout with fixed sample values matching the
-/// reference design — for the offscreen `ImageRenderer` snapshot harness
-/// (`SnapshotHarness`), which lets us actually see the rendered SwiftUI
-/// without any screen-recording permission. Lives here so it can reach the
-/// file-private section components; internal so the harness (App target) can
-/// render it.
 struct HomeSnapshotContent: View {
     var body: some View {
         VStack(spacing: 16) {
@@ -415,11 +410,12 @@ struct HomeSnapshotContent: View {
                 lastCheckDate: Date().addingTimeInterval(-7200), isChecking: false,
                 onHealthCheck: {}, onClean: {}
             )
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 ModuleTile(tab: .clean, name: "清理", value: .data("12.3 GB"), onOpen: { _ in })
                 ModuleTile(tab: .docker, name: "Docker", value: .data("1.9 GB"), onOpen: { _ in })
                 ModuleTile(tab: .purge, name: "构建产物", value: .pending, onOpen: { _ in })
                 ModuleTile(tab: .uninstall, name: "卸载应用", value: .data("48 个"), onOpen: { _ in })
+                ModuleTile(tab: .largeFiles, name: "大文件", value: .data("3.2 GB"), onOpen: { _ in })
                 ModuleTile(tab: .status, name: "状态", value: .data("26%"), onOpen: { _ in })
             }
             SystemOverviewCard(cpu: 26, memory: 73, disk: 52)

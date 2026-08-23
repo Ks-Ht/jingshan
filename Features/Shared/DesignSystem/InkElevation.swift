@@ -31,11 +31,11 @@ struct InkCardModifier: ViewModifier {
             // rounded rect only — never the text inside it.
             .clipShape(shape)
             .overlay(
-                shape.stroke(scheme == .dark ? Color.white.opacity(0.07) : InkPalette.hairline.opacity(0.6), lineWidth: 0.5)
+                shape.stroke(scheme == .dark ? Color.white.opacity(0.08) : Color.black.opacity(0.05), lineWidth: 0.8)
             )
             // Dual shadow = ambient + key; tuned to be felt, not seen.
-            .shadow(color: .black.opacity(scheme == .dark ? 0.30 : 0.05), radius: 1, y: 1)
-            .shadow(color: .black.opacity(scheme == .dark ? 0.20 : 0.06), radius: 14, y: 6)
+            .shadow(color: .black.opacity(scheme == .dark ? 0.35 : 0.03), radius: 2, y: 1)
+            .shadow(color: .black.opacity(scheme == .dark ? 0.22 : 0.05), radius: 12, y: 5)
     }
 }
 
@@ -48,10 +48,10 @@ struct HoverLiftModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .scaleEffect(hovering && !reduceMotion ? 1.005 : 1)
-            .shadow(color: .black.opacity(hovering ? 0.07 : 0), radius: 16, y: 8)
+            .scaleEffect(hovering && !reduceMotion ? 1.008 : 1)
+            .shadow(color: .black.opacity(hovering ? 0.08 : 0), radius: 14, y: 6)
             .onHover { hovering = $0 }
-            .animation(reduceMotion ? nil : .easeOut(duration: 0.16), value: hovering)
+            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.8), value: hovering)
     }
 }
 

@@ -174,11 +174,11 @@ cd .. && xcodebuild -project Jingshan.xcodeproj -scheme Jingshan -configuration 
 
 **环境要求**：`xcode-select` 已切换到 `/Applications/Xcode.app/Contents/Developer`，`swift build`/`swift test`/`xcodebuild` 均可直接使用，无需 `DEVELOPER_DIR=` 前缀。`xcodegen`（2.45.4）已通过 Homebrew 安装，工程改动后需 `xcodegen generate` 重新生成 `.xcodeproj`（已 gitignore，不进仓库，`project.yml` 才是真源）。
 
-## 当前状态（2026-08-10 更新，最重要，先读这段）
+## 当前状态（2026-08-23 更新，最重要，先读这段）
 
-**最新版本是 `v0.9.0`。** M27+M28 产品、测试、必要文档与发布审计修复已经整理到 `codex/audit-release-v0.9.0`，合并到 `main` 并推送；`.superpowers/` 本地草图未纳入提交。发布资源是 arm64+x86_64 通用 App，ZIP SHA-256 为 `a22ce2ef6d5bb3804c3e2cae0e91f4a31f70ee271546a98b6c06f085b615ab27`。
+**最新版本是 `v0.9.1`。** M29 的 UI 质感与布局优化已提交到 `main` 并发布；`.superpowers/` 本地草图未纳入提交。发布资源是 arm64+x86_64 通用 App，ZIP `Jingshan-0.9.1.zip`（2,599,144 bytes），SHA-256 为 `226c625938656dbbed51b21ae88101c3598a8bfa07e65d2169b64b212b94b580`。上一版 v0.9.0 的 ZIP SHA-256 为 `a22ce2ef6d5bb3804c3e2cae0e91f4a31f70ee271546a98b6c06f085b615ab27`。
 
-**版本脉络**：v0.7.0（M19 首发）→ v0.8.0（M20–M23 水墨重构/导航/首页）→ v0.8.1（M24–M26：FDA 引导/强力模式/清理历史+恢复/大文件/菜单栏/监控扩展）→ **v0.9.0（M27+M28 + 发布审计）**。
+**版本脉络**：v0.7.0（M19 首发）→ v0.8.0（M20–M23 水墨重构/导航/首页）→ v0.8.1（M24–M26：FDA 引导/强力模式/清理历史+恢复/大文件/菜单栏/监控扩展）→ v0.9.0（M27+M28 + 发布审计）→ **v0.9.1（M29 UI 质感/布局优化 + 首页大文件磁贴）**。
 
 **M27 干了什么**（本轮，未提交）：三路只读子 agent 审计（安全正确性 / UX / 代码质量，中途因额度中断用 SendMessage 恢复完成）→ 修审计发现 + 「墨韵 Studio」设计系统 v2。审计结论：删除安全契约（扫描→评审→勾选→移废纸篓 + 受保护路径硬拦截）在所有路径成立，无 Critical，核心引擎分层被两路审计点赞。**修掉的真 bug**：①五个模块清理后"自动重扫"是死代码（`defer isCleaning=false` 晚于 `startScan()` 的 guard → 清完列表仍显示已删项，卸载完 App 还在列表）——五个 VM + emptyTrash 全改为 `isCleaning=false → startScan() → lastSummary=summary`（顺序保证弹窗仍出现）；②删除循环把扫描测好的体积丢掉在主线程重遍历整树（大目录卡死）——五处 `engine.delete` 补 `precomputedSizeBytes: item.sizeBytes`；③恢复功能加固：新建 `JingshanCore/History/CleanupRestore.swift`（`TrashedItem` 指纹 size+inode 防同名换身、trashPath 必须锚定在废纸篓内、失败项保留 remaining 可重试、全部恢复才标 restored），App 层 `CleanupHistoryStore.restore` 委托它，**6 条新单测**；④`sizeAsync` 改 URL 流式枚举（可取消、跳符号链接不虚计目标体积）；⑤菜单栏采样随 `menuBarEnabled` 起停；⑥relaunch 仅新实例成功才退出；⑦Deep 去掉与 `~/.cache` 双计的 puppeteer；⑧Clean 扫描加代次 token 丢弃取消后迟到回调。**UX 落地**：根部 `.tint(品牌绿)` + `ConfirmSheetShell` 加 `tint` 参数（**全 App 最重要的"确认清理"按钮之前一直是系统蓝——sheet 不继承外部 tint**）；`SystemHealthTint` 语义化（墨绿/琥珀/墨红，阈值统一 70/90，首页概览条并入同公式）；对比度提档（purge/status/amber 浅色加深）；清空废纸篓/清空记录 destructive+确认；勾选整行可点+禁用变暗；分组头改真 Button；补 VoiceOver；死组件 ResultToast/SectionCard 删除。**设计 v2**：新 `InkTypography`（圆体大数字/字距）+ `InkElevation`（统一 `inkCard`：不透明卡面→先裁剪后双层柔影，深色用亮面描边替代阴影；`hoverLift`）；深色改真"墨夜"三层（paper #131418 / card #1E2025）；RingGauge 角向渐变+着色轨道+圆体数字；山脊改双层（远淡近浓）；首页 Hero 专属 `heroWashCard`（品牌绿渐变洗底+内嵌山影）；`bentoCard`/`homeCard` 全委托 `inkCard`。**快赢**：⌘1–⌘7 切标签。**验证**：157 测试全绿、Debug/Release 构建通过、`nm` 零 harness 符号、14 张浅/深双色快照肉眼核对、装机冒烟无 crash。
 

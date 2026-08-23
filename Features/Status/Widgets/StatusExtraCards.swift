@@ -53,16 +53,19 @@ struct PerCoreCard: View {
                 let columns = [GridItem(.adaptive(minimum: 70), spacing: 8)]
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 8) {
                     ForEach(Array(perCore.enumerated()), id: \.offset) { index, value in
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("#\(index + 1)").font(.caption2).foregroundStyle(.secondary)
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text("#\(index + 1)").font(.caption2).foregroundStyle(.secondary)
+                                Spacer()
+                                Text("\(Int(value.rounded()))%").font(.caption2.weight(.medium)).monospacedDigit()
+                            }
                             GeometryReader { geo in
                                 ZStack(alignment: .leading) {
                                     Capsule().fill(Color.primary.opacity(0.08))
-                                    Capsule().fill(tint(value)).frame(width: geo.size.width * CGFloat(min(max(value, 0), 100) / 100))
+                                    Capsule().fill(tint(value)).frame(width: max(0, min(geo.size.width, geo.size.width * CGFloat(min(max(value, 0), 100) / 100))))
                                 }
                             }
-                            .frame(height: 5)
-                            Text("\(Int(value.rounded()))%").font(.caption2).monospacedDigit()
+                            .frame(height: 6)
                         }
                     }
                 }
@@ -81,22 +84,27 @@ struct TopProcessesCard: View {
     let rows: [ProcessUsageRow]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             header("占用最高的进程", systemImage: "list.bullet.rectangle", tint: InkPalette.statusAccent)
             if rows.isEmpty {
                 Text("正在采集…").font(.caption).foregroundStyle(.secondary)
             } else {
-                ForEach(rows) { row in
-                    HStack(spacing: 8) {
-                        Text(row.name)
-                            .font(.caption)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Text("\(String(format: "%.0f", row.cpuPercent))%")
-                            .font(.caption.weight(.semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(SystemHealthTint.forUsagePercent(row.cpuPercent))
+                VStack(spacing: 6) {
+                    ForEach(rows) { row in
+                        HStack(spacing: 8) {
+                            Circle()
+                                .fill(SystemHealthTint.forUsagePercent(row.cpuPercent))
+                                .frame(width: 5, height: 5)
+                            Text(row.name)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Text("\(String(format: "%.1f", row.cpuPercent))%")
+                                .font(.caption.weight(.semibold))
+                                .monospacedDigit()
+                                .foregroundStyle(SystemHealthTint.forUsagePercent(row.cpuPercent))
+                        }
                     }
                 }
             }
